@@ -24,6 +24,8 @@ func _ready() -> void:
 	start_btn.visible = NetworkManager.is_host()
 	_refresh_player_list()
 
+	$Title.text = "Lobi  —  %s  |  Kod: %s" % [NetworkManager.room_name, RoomManager.room_code]
+
 	for i in range(team_buttons.size()):
 		team_buttons[i].pressed.connect(_on_team_selected.bind(i))
 		team_buttons[i].text = TeamManager.get_team_name(i)

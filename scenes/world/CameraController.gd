@@ -14,6 +14,7 @@ var _snapped: bool  = false
 
 func _ready() -> void:
 	rotation_degrees = Vector3(PITCH, 0.0, 0.0)
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_ON
 	GameManager.local_player_spawned.connect(_on_local_player_spawned)
 
 
@@ -28,6 +29,7 @@ func _physics_process(delta: float) -> void:
 	var desired: Vector3 = _target.global_position + OFFSET
 	if not _snapped:
 		global_position = desired
+		reset_physics_interpolation()
 		_snapped = true
 	else:
 		# Exponential decay lerp — framerate bağımsız, sinematik yumuşaklık

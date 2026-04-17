@@ -9,6 +9,7 @@ signal connection_failed
 signal player_connected(peer_id: int)
 signal player_disconnected(peer_id: int)
 signal player_list_updated
+signal kicked(reason: String)
 
 const PORT := 7777
 const MAX_PLAYERS := 20  # 4 takım × 5 oyuncu
@@ -16,14 +17,19 @@ const MAX_PLAYERS := 20  # 4 takım × 5 oyuncu
 ## peer_id -> { name, team_id, is_ready }
 var players: Dictionary = {}
 var local_player_name: String = ""
+var room_name: String = ""
+var _room_password: String = ""
+var _pending_password: String = ""
 
 
 # ─────────────────────────────────────────────
 # Sunucu / İstemci Kurulum
 # ─────────────────────────────────────────────
 
-func create_server(player_name: String) -> void:
+func create_server(player_name: String, p_room_name: String = "", p_password: String = "") -> void:
 	local_player_name = player_name
+	room_name         = p_room_name
+	_room_password    = p_password
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_server(PORT, MAX_PLAYERS)
 	if err != OK:
@@ -33,12 +39,14 @@ func create_server(player_name: String) -> void:
 	_connect_multiplayer_signals()
 	# Host kendini ekle
 	players[1] = { "name": local_player_name, "team_id": -1, "is_ready": false }
+	RoomManager.create_room(p_room_name, p_password)
 	emit_signal("server_created")
 	emit_signal("player_list_updated")
 
 
-func join_server(address: String, player_name: String) -> void:
-	local_player_name = player_name
+func join_server(address: String, player_name: String, p_password: String = "") -> void:
+	local_player_name  = player_name
+	_pending_password  = p_password
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_client(address, PORT)
 	if err != OK:
@@ -54,6 +62,11 @@ func disconnect_all() -> void:
 		multiplayer.multiplayer_peer.close()
 	multiplayer.multiplayer_peer = null
 	players.clear()
+	room_name      = ""
+	_room_password = ""
+	_pending_password = ""
+	RoomManager.stop_hosting()
+	RoomManager.stop_listening()
 
 
 # ─────────────────────────────────────────────
@@ -84,9 +97,8 @@ func _on_peer_disconnected(id: int) -> void:
 
 
 func _on_connected_to_server() -> void:
-	# İstemci sunucuya kayıt olur
-	register_player.rpc_id(1, multiplayer.get_unique_id(), local_player_name)
-	emit_signal("joined_server")
+	# joined_server emit etmiyoruz — host _accept_player RPC'si ile onaylayacak
+	register_player.rpc_id(1, multiplayer.get_unique_id(), local_player_name, _pending_password)
 
 
 func _on_connection_failed() -> void:
@@ -98,12 +110,17 @@ func _on_connection_failed() -> void:
 # ─────────────────────────────────────────────
 
 @rpc("any_peer", "reliable")
-func register_player(peer_id: int, player_name: String) -> void:
+func register_player(peer_id: int, player_name: String, password: String) -> void:
 	if not multiplayer.is_server():
 		return
+	# Şifre kontrolü
+	if not _room_password.is_empty() and password != _room_password:
+		_reject_player.rpc_id(peer_id, "Yanlış şifre!")
+		return
 	players[peer_id] = { "name": player_name, "team_id": -1, "is_ready": false }
-	# Yeni oyuncuya mevcut listeyi gönder
+	# Yeni oyuncuya mevcut listeyi gönder, ardından kabul bildir
 	receive_player_list.rpc_id(peer_id, players)
+	_accept_player.rpc_id(peer_id)
 	# Diğer herkese güncel listeyi gönder
 	_broadcast_player_list()
 	emit_signal("player_list_updated")
@@ -117,6 +134,20 @@ func _broadcast_player_list() -> void:
 func receive_player_list(player_list: Dictionary) -> void:
 	players = player_list
 	emit_signal("player_list_updated")
+
+
+@rpc("authority", "reliable")
+func _accept_player() -> void:
+	emit_signal("joined_server")
+
+
+@rpc("authority", "reliable")
+func _reject_player(reason: String) -> void:
+	emit_signal("kicked", reason)
+	if multiplayer.multiplayer_peer:
+		multiplayer.multiplayer_peer.close()
+	multiplayer.multiplayer_peer = null
+	players.clear()
 
 
 # ─────────────────────────────────────────────

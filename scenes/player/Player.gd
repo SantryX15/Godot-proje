@@ -31,6 +31,7 @@ var _base_material: StandardMaterial3D = null
 var _target_position: Vector3 = Vector3.ZERO
 var _target_aim_y: float = 0.0
 var _sync_timer: float = 0.0
+var _card_pickup_blocked: float = 0.0
 
 
 func initialize(p_peer_id: int, p_team_id: int) -> void:
@@ -58,6 +59,8 @@ func initialize(p_peer_id: int, p_team_id: int) -> void:
 	health_label.text = "❤ 100"
 
 	_target_position = global_position
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_ON
+	reset_physics_interpolation()
 
 	_equip_default_weapon()
 
@@ -82,6 +85,9 @@ func _physics_process(delta: float) -> void:
 
 
 func _handle_local_input(delta: float) -> void:
+	if _card_pickup_blocked > 0.0:
+		_card_pickup_blocked -= delta
+
 	# WASD hareketi (X/Z düzlemi) — önce yatay hız, sonra yerçekimi
 	var dir := Vector3.ZERO
 	if Input.is_action_pressed("move_up"):    dir.z -= 1
@@ -217,6 +223,8 @@ func _apply_respawn(spawn_pos: Vector3) -> void:
 	health_label.text = "❤ %d" % int(health)
 	global_position = spawn_pos
 	_target_position = spawn_pos
+	_card_pickup_blocked = 0.5
+	reset_physics_interpolation()
 	mesh_instance.set_surface_override_material(0, _base_material)
 	collision_shape.disabled = false
 	flashlight.visible = true

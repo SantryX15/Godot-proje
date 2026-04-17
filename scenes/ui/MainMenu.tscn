@@ -1,51 +1,215 @@
-[gd_scene load_steps=2 format=3 uid="uid://mainmenu001"]
+[gd_scene format=3 uid="uid://mainmenu001"]
 
-[ext_resource type="Script" path="res://scenes/ui/MainMenu.gd" id="1_mainmenu"]
+[ext_resource type="Script" uid="uid://dsimchieg6245" path="res://scenes/ui/MainMenu.gd" id="1_mainmenu"]
 
 [node name="MainMenu" type="Control"]
 layout_mode = 3
 anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 script = ExtResource("1_mainmenu")
 
 [node name="Background" type="ColorRect" parent="."]
 layout_mode = 1
 anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 color = Color(0.06, 0.06, 0.1, 1)
 
-[node name="VBoxContainer" type="VBoxContainer" parent="."]
+[node name="ScreenMain" type="VBoxContainer" parent="."]
 layout_mode = 1
 anchor_left = 0.5
-anchor_right = 0.5
 anchor_top = 0.5
+anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -150.0
-offset_top = -180.0
-offset_right = 150.0
-offset_bottom = 180.0
+offset_left = -160.0
+offset_top = -160.0
+offset_right = 160.0
+offset_bottom = 160.0
 alignment = 1
 
-[node name="Title" type="Label" parent="VBoxContainer"]
+[node name="Title" type="Label" parent="ScreenMain"]
+layout_mode = 2
 text = "TacticalDark"
 horizontal_alignment = 1
 
-[node name="NameInput" type="LineEdit" parent="VBoxContainer"]
+[node name="NameInput" type="LineEdit" parent="ScreenMain"]
+custom_minimum_size = Vector2(300, 40)
+layout_mode = 2
 placeholder_text = "Oyuncu Adı"
-custom_minimum_size = Vector2(300, 40)
 
-[node name="IPInput" type="LineEdit" parent="VBoxContainer"]
-placeholder_text = "Sunucu IP (varsayılan: 127.0.0.1)"
-custom_minimum_size = Vector2(300, 40)
-
-[node name="HostButton" type="Button" parent="VBoxContainer"]
-text = "Sunucu Oluştur"
+[node name="BtnCreateRoom" type="Button" parent="ScreenMain"]
 custom_minimum_size = Vector2(300, 48)
+layout_mode = 2
+text = "Oda Oluştur"
 
-[node name="JoinButton" type="Button" parent="VBoxContainer"]
-text = "Sunucuya Katıl"
+[node name="BtnBrowse" type="Button" parent="ScreenMain"]
 custom_minimum_size = Vector2(300, 48)
+layout_mode = 2
+text = "Odaları Listele"
 
-[node name="StatusLabel" type="Label" parent="VBoxContainer"]
+[node name="StatusMain" type="Label" parent="ScreenMain"]
+layout_mode = 2
 horizontal_alignment = 1
 
-[connection signal="pressed" from="VBoxContainer/HostButton" to="." method="_on_host_button_pressed"]
-[connection signal="pressed" from="VBoxContainer/JoinButton" to="." method="_on_join_button_pressed"]
+[node name="ScreenCreate" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -160.0
+offset_top = -160.0
+offset_right = 160.0
+offset_bottom = 160.0
+visible = false
+alignment = 1
+
+[node name="HeaderCreate" type="HBoxContainer" parent="ScreenCreate"]
+layout_mode = 2
+
+[node name="BtnBackCreate" type="Button" parent="ScreenCreate/HeaderCreate"]
+custom_minimum_size = Vector2(44, 44)
+layout_mode = 2
+text = "<"
+
+[node name="LabelCreate" type="Label" parent="ScreenCreate/HeaderCreate"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Oda Oluştur"
+vertical_alignment = 1
+
+[node name="RoomNameInput" type="LineEdit" parent="ScreenCreate"]
+custom_minimum_size = Vector2(300, 40)
+layout_mode = 2
+placeholder_text = "Oda Adı"
+
+[node name="PasswordInput" type="LineEdit" parent="ScreenCreate"]
+custom_minimum_size = Vector2(300, 40)
+layout_mode = 2
+placeholder_text = "Şifre (opsiyonel)"
+secret = true
+
+[node name="BtnHost" type="Button" parent="ScreenCreate"]
+custom_minimum_size = Vector2(300, 48)
+layout_mode = 2
+text = "Oluştur"
+
+[node name="StatusCreate" type="Label" parent="ScreenCreate"]
+layout_mode = 2
+horizontal_alignment = 1
+
+[node name="ScreenBrowse" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -10.0
+visible = false
+
+[node name="HeaderBrowse" type="HBoxContainer" parent="ScreenBrowse"]
+custom_minimum_size = Vector2(0, 50)
+layout_mode = 2
+
+[node name="BtnBackBrowse" type="Button" parent="ScreenBrowse/HeaderBrowse"]
+custom_minimum_size = Vector2(44, 44)
+layout_mode = 2
+text = "<"
+
+[node name="LabelBrowse" type="Label" parent="ScreenBrowse/HeaderBrowse"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Odalar"
+vertical_alignment = 1
+
+[node name="BtnRefresh" type="Button" parent="ScreenBrowse/HeaderBrowse"]
+layout_mode = 2
+text = "Yenile"
+
+[node name="ScrollContainer" type="ScrollContainer" parent="ScreenBrowse"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="RoomList" type="VBoxContainer" parent="ScreenBrowse/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="NoRoomsLabel" type="Label" parent="ScreenBrowse"]
+layout_mode = 2
+text = "LAN'da oda bulunamadı."
+horizontal_alignment = 1
+
+[node name="BtnJoinByCode" type="Button" parent="ScreenBrowse"]
+custom_minimum_size = Vector2(300, 48)
+layout_mode = 2
+text = "Kod ile Katıl"
+
+[node name="StatusBrowse" type="Label" parent="ScreenBrowse"]
+layout_mode = 2
+horizontal_alignment = 1
+
+[node name="JoinCodePanel" type="PanelContainer" parent="."]
+layout_mode = 1
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -170.0
+offset_top = -160.0
+offset_right = 170.0
+offset_bottom = 160.0
+visible = false
+
+[node name="PanelVBox" type="VBoxContainer" parent="JoinCodePanel"]
+layout_mode = 2
+
+[node name="TitleCode" type="Label" parent="JoinCodePanel/PanelVBox"]
+layout_mode = 2
+text = "Kod ile Katıl"
+horizontal_alignment = 1
+
+[node name="CodeInput" type="LineEdit" parent="JoinCodePanel/PanelVBox"]
+custom_minimum_size = Vector2(300, 40)
+layout_mode = 2
+placeholder_text = "7 Haneli Oda Kodu"
+max_length = 7
+
+[node name="CodePwInput" type="LineEdit" parent="JoinCodePanel/PanelVBox"]
+custom_minimum_size = Vector2(300, 40)
+layout_mode = 2
+placeholder_text = "Şifre (gerekiyorsa)"
+secret = true
+
+[node name="HBoxCodeBtns" type="HBoxContainer" parent="JoinCodePanel/PanelVBox"]
+layout_mode = 2
+
+[node name="BtnJoin" type="Button" parent="JoinCodePanel/PanelVBox/HBoxCodeBtns"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Katıl"
+
+[node name="BtnCancelCode" type="Button" parent="JoinCodePanel/PanelVBox/HBoxCodeBtns"]
+layout_mode = 2
+text = "İptal"
+
+[node name="StatusCode" type="Label" parent="JoinCodePanel/PanelVBox"]
+layout_mode = 2
+horizontal_alignment = 1
+
+[connection signal="pressed" from="ScreenMain/BtnCreateRoom" to="." method="_on_btn_create_room_pressed"]
+[connection signal="pressed" from="ScreenMain/BtnBrowse" to="." method="_on_btn_browse_pressed"]
+[connection signal="pressed" from="ScreenCreate/HeaderCreate/BtnBackCreate" to="." method="_on_btn_back_create_pressed"]
+[connection signal="pressed" from="ScreenCreate/BtnHost" to="." method="_on_btn_host_pressed"]
+[connection signal="pressed" from="ScreenBrowse/HeaderBrowse/BtnBackBrowse" to="." method="_on_btn_back_browse_pressed"]
+[connection signal="pressed" from="ScreenBrowse/HeaderBrowse/BtnRefresh" to="." method="_on_btn_refresh_pressed"]
+[connection signal="pressed" from="ScreenBrowse/BtnJoinByCode" to="." method="_on_btn_join_by_code_pressed"]
+[connection signal="pressed" from="JoinCodePanel/PanelVBox/HBoxCodeBtns/BtnJoin" to="." method="_on_btn_join_pressed"]
+[connection signal="pressed" from="JoinCodePanel/PanelVBox/HBoxCodeBtns/BtnCancelCode" to="." method="_on_btn_cancel_code_pressed"]

@@ -16,6 +16,9 @@ func _on_body_entered(body: Node) -> void:
 		return
 	if body.get("has_card"):
 		return
+	var _blocked = body.get("_card_pickup_blocked")
+	if _blocked != null and (_blocked as float) > 0.0:
+		return
 
 	var my_id := NetworkManager.get_local_id()
 	if NetworkManager.is_host():
