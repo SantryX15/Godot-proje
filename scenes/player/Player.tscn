@@ -1,0 +1,42 @@
+[gd_scene load_steps=3 format=3 uid="uid://player001"]
+
+[ext_resource type="Script" path="res://scenes/player/Player.gd" id="1_player"]
+[ext_resource type="Texture2D" path="res://icon.svg" id="2_icon"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_001"]
+radius = 14.0
+
+[node name="Player" type="CharacterBody2D"]
+script = ExtResource("1_player")
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+texture = ExtResource("2_icon")
+scale = Vector2(0.22, 0.22)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_001")
+
+[node name="WeaponHolder" type="Node2D" parent="."]
+position = Vector2(14, 0)
+
+[node name="Flashlight" type="PointLight2D" parent="."]
+color = Color(1, 0.95, 0.8, 1)
+energy = 1.5
+texture_scale = 2.5
+shadow_enabled = true
+shadow_filter = 1
+
+[node name="HealthBar" type="ProgressBar" parent="."]
+offset_left = -20.0
+offset_top = -30.0
+offset_right = 20.0
+offset_bottom = -22.0
+show_percentage = false
+
+[node name="NameLabel" type="Label" parent="."]
+offset_left = -30.0
+offset_top = -46.0
+offset_right = 30.0
+offset_bottom = -30.0
+horizontal_alignment = 1
+

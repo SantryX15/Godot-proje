@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where godot:*)",
+      "Bash(where godot4:*)"
+    ]
+  }
+}

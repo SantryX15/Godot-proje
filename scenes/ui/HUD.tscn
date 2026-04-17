@@ -1,0 +1,51 @@
+[gd_scene load_steps=2 format=3 uid="uid://hud001"]
+
+[ext_resource type="Script" path="res://scenes/ui/HUD.gd" id="1_hud"]
+
+[node name="HUD" type="CanvasLayer"]
+script = ExtResource("1_hud")
+
+[node name="ScorePanel" type="PanelContainer" parent="."]
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 200.0
+offset_bottom = 130.0
+
+[node name="VBox" type="VBoxContainer" parent="ScorePanel"]
+layout_mode = 2
+
+[node name="Score0" type="Label" parent="ScorePanel/VBox"]
+text = "Mavi: 0"
+
+[node name="Score1" type="Label" parent="ScorePanel/VBox"]
+text = "Kırmızı: 0"
+
+[node name="Score2" type="Label" parent="ScorePanel/VBox"]
+text = "Yeşil: 0"
+
+[node name="Score3" type="Label" parent="ScorePanel/VBox"]
+text = "Sarı: 0"
+
+[node name="EndPanel" type="PanelContainer" parent="."]
+layout_mode = 1
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -150.0
+offset_top = -80.0
+offset_right = 150.0
+offset_bottom = 80.0
+visible = false
+
+[node name="VBox" type="VBoxContainer" parent="EndPanel"]
+layout_mode = 2
+
+[node name="WinnerLabel" type="Label" parent="EndPanel/VBox"]
+text = "Kazanan: ?"
+horizontal_alignment = 1
+
+[node name="BackBtn" type="Button" parent="EndPanel/VBox"]
+text = "Ana Menüye Dön"
+
+[connection signal="pressed" from="EndPanel/VBox/BackBtn" to="." method="_on_back_btn_pressed"]

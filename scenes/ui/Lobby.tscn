@@ -1,0 +1,82 @@
+[gd_scene load_steps=2 format=3 uid="uid://lobby001"]
+
+[ext_resource type="Script" path="res://scenes/ui/Lobby.gd" id="1_lobby"]
+
+[node name="Lobby" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+script = ExtResource("1_lobby")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+color = Color(0.07, 0.07, 0.12, 1)
+
+[node name="Title" type="Label" parent="."]
+layout_mode = 1
+anchor_left = 0.0
+anchor_top = 0.0
+offset_left = 20.0
+offset_top = 10.0
+offset_right = 400.0
+offset_bottom = 50.0
+text = "Lobi"
+
+[node name="HSplit" type="HSplitContainer" parent="."]
+layout_mode = 1
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = 60.0
+offset_right = -20.0
+offset_bottom = -20.0
+
+[node name="PlayerList" type="PanelContainer" parent="HSplit"]
+custom_minimum_size = Vector2(400, 0)
+
+[node name="VBoxContainer" type="VBoxContainer" parent="HSplit/PlayerList"]
+layout_mode = 2
+
+[node name="TeamPanel" type="PanelContainer" parent="HSplit"]
+
+[node name="VBox" type="VBoxContainer" parent="HSplit/TeamPanel"]
+layout_mode = 2
+
+[node name="TeamLabel" type="Label" parent="HSplit/TeamPanel/VBox"]
+text = "Takım Seç:"
+
+[node name="Team0Btn" type="Button" parent="HSplit/TeamPanel/VBox"]
+text = "Takım 0"
+custom_minimum_size = Vector2(200, 44)
+
+[node name="Team1Btn" type="Button" parent="HSplit/TeamPanel/VBox"]
+text = "Takım 1"
+custom_minimum_size = Vector2(200, 44)
+
+[node name="Team2Btn" type="Button" parent="HSplit/TeamPanel/VBox"]
+text = "Takım 2"
+custom_minimum_size = Vector2(200, 44)
+
+[node name="Team3Btn" type="Button" parent="HSplit/TeamPanel/VBox"]
+text = "Takım 3"
+custom_minimum_size = Vector2(200, 44)
+
+[node name="ReadyBtn" type="Button" parent="HSplit/TeamPanel/VBox"]
+text = "Hazır"
+custom_minimum_size = Vector2(200, 44)
+
+[node name="StartBtn" type="Button" parent="HSplit/TeamPanel/VBox"]
+text = "Oyunu Başlat (Host)"
+custom_minimum_size = Vector2(200, 44)
+
+[node name="StatusLabel" type="Label" parent="HSplit/TeamPanel/VBox"]
+text = ""
+
+[node name="BackBtn" type="Button" parent="HSplit/TeamPanel/VBox"]
+text = "Geri"
+
+[connection signal="pressed" from="HSplit/TeamPanel/VBox/ReadyBtn" to="." method="_on_ready_btn_pressed"]
+[connection signal="pressed" from="HSplit/TeamPanel/VBox/StartBtn" to="." method="_on_start_btn_pressed"]
+[connection signal="pressed" from="HSplit/TeamPanel/VBox/BackBtn" to="." method="_on_back_pressed"]

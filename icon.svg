@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Arkaplan: Mavi yuvarlak köşeli kare -->
+  <rect x="2" y="2" width="124" height="124" rx="16" fill="#478cbf"/>
+
+  <!-- Gövde (beyaz) -->
+  <ellipse cx="64" cy="72" rx="34" ry="38" fill="#fff"/>
+
+  <!-- Kafa üstü çıkıntılar -->
+  <rect x="30" y="36" width="14" height="22" rx="7" fill="#fff"/>
+  <rect x="84" y="36" width="14" height="22" rx="7" fill="#fff"/>
+
+  <!-- Kafa/Gözlük çerçevesi -->
+  <ellipse cx="64" cy="60" rx="30" ry="26" fill="#fff"/>
+
+  <!-- Sol göz -->
+  <circle cx="52" cy="58" r="10" fill="#478cbf"/>
+  <circle cx="52" cy="58" r="5" fill="#fff"/>
+
+  <!-- Sağ göz -->
+  <circle cx="76" cy="58" r="10" fill="#478cbf"/>
+  <circle cx="76" cy="58" r="5" fill="#fff"/>
+
+  <!-- Ağız -->
+  <rect x="50" y="76" width="28" height="6" rx="3" fill="#478cbf"/>
+
+  <!-- Alt ayaklar -->
+  <rect x="36" y="96" width="18" height="22" rx="6" fill="#fff"/>
+  <rect x="74" y="96" width="18" height="22" rx="6" fill="#fff"/>
+</svg>

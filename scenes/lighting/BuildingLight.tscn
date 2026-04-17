@@ -1,0 +1,8 @@
+[gd_scene load_steps=1 format=3 uid="uid://buildinglight001"]
+
+[node name="BuildingLight" type="PointLight2D"]
+color = Color(1.0, 0.85, 0.6, 1.0)
+energy = 0.8
+texture_scale = 2.0
+shadow_enabled = true
+shadow_filter = 1
