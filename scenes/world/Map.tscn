@@ -1,315 +1,108 @@
-[gd_scene format=3 uid="uid://map001"]
+[gd_scene load_steps=7 format=3 uid="uid://map_3d_scene"]
 
-[ext_resource type="Script" uid="uid://tm3sesnswm8k" path="res://scenes/world/Map.gd" id="1_map"]
+[ext_resource type="Script" path="res://scenes/world/Map.gd" id="1_map"]
+[ext_resource type="Environment" path="res://default_env.tres" id="2_env"]
+[ext_resource type="PackedScene" path="res://scenes/ui/HUD.tscn" id="3_hud"]
+[ext_resource type="Script" path="res://scenes/world/CameraController.gd" id="4_cam"]
 
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_qj8ri"]
-size = Vector2(40, 1997)
+[sub_resource type="PlaneMesh" id="PlaneMesh_1"]
+size = Vector2(130, 110)
 
-[sub_resource type="OccluderPolygon2D" id="OccluderPolygon2D_qj8ri"]
-polygon = PackedVector2Array(-20, -18, 20, -18, 19, 1980, -20, 1980)
+[sub_resource type="BoxShape3D" id="BoxShape3D_ground"]
+size = Vector3(130, 0.2, 110)
 
-[sub_resource type="Gradient" id="Gradient_i0nq5"]
-colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 0)
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ground"]
+albedo_color = Color(0.1, 0.1, 0.12, 1)
 
-[sub_resource type="GradientTexture2D" id="GradientTexture2D_wh2ss"]
-gradient = SubResource("Gradient_i0nq5")
-width = 256
-height = 256
-fill = 1
-fill_from = Vector2(0.5, 0.5)
-fill_to = Vector2(1, 0.5)
-
-[node name="Map" type="Node2D" unique_id=109219864]
+[node name="Map" type="Node3D"]
 script = ExtResource("1_map")
 
-[node name="CanvasModulate" type="CanvasModulate" parent="." unique_id=1196439018]
-color = Color(0.039215688, 0.039215688, 0.0627451, 1)
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = ExtResource("2_env")
 
-[node name="SpawnPoints" type="Node2D" parent="." unique_id=293834801]
+[node name="Ground" type="StaticBody3D" parent="."]
+collision_layer = 1
+collision_mask = 0
 
-[node name="Team0" type="Node2D" parent="SpawnPoints" unique_id=324530259]
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Ground"]
+mesh = SubResource("PlaneMesh_1")
+material_override = SubResource("StandardMaterial3D_ground")
 
-[node name="Spawn0" type="Marker2D" parent="SpawnPoints/Team0" unique_id=1932077493]
-position = Vector2(-880, -760)
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ground"]
+position = Vector3(0, -0.1, 0)
+shape = SubResource("BoxShape3D_ground")
 
-[node name="Spawn1" type="Marker2D" parent="SpawnPoints/Team0" unique_id=415941572]
-position = Vector2(-840, -720)
+[node name="SpawnPoints" type="Node3D" parent="."]
 
-[node name="Spawn2" type="Marker2D" parent="SpawnPoints/Team0" unique_id=1847514980]
-position = Vector2(-800, -760)
+[node name="Team0" type="Node3D" parent="SpawnPoints"]
 
-[node name="Spawn3" type="Marker2D" parent="SpawnPoints/Team0" unique_id=656323981]
-position = Vector2(-840, -800)
+[node name="Spawn0" type="Marker3D" parent="SpawnPoints/Team0"]
+position = Vector3(-44, 0, -38)
 
-[node name="Spawn4" type="Marker2D" parent="SpawnPoints/Team0" unique_id=1598410228]
-position = Vector2(-880, -800)
+[node name="Spawn1" type="Marker3D" parent="SpawnPoints/Team0"]
+position = Vector3(-42, 0, -36)
 
-[node name="Team1" type="Node2D" parent="SpawnPoints" unique_id=16246505]
+[node name="Spawn2" type="Marker3D" parent="SpawnPoints/Team0"]
+position = Vector3(-40, 0, -38)
 
-[node name="Spawn0" type="Marker2D" parent="SpawnPoints/Team1" unique_id=1428252144]
-position = Vector2(880, -760)
+[node name="Spawn3" type="Marker3D" parent="SpawnPoints/Team0"]
+position = Vector3(-42, 0, -40)
 
-[node name="Spawn1" type="Marker2D" parent="SpawnPoints/Team1" unique_id=1978972152]
-position = Vector2(840, -720)
+[node name="Spawn4" type="Marker3D" parent="SpawnPoints/Team0"]
+position = Vector3(-44, 0, -40)
 
-[node name="Spawn2" type="Marker2D" parent="SpawnPoints/Team1" unique_id=1512443738]
-position = Vector2(800, -760)
+[node name="Team1" type="Node3D" parent="SpawnPoints"]
 
-[node name="Spawn3" type="Marker2D" parent="SpawnPoints/Team1" unique_id=486814604]
-position = Vector2(840, -800)
+[node name="Spawn0" type="Marker3D" parent="SpawnPoints/Team1"]
+position = Vector3(44, 0, -38)
 
-[node name="Spawn4" type="Marker2D" parent="SpawnPoints/Team1" unique_id=1152977220]
-position = Vector2(880, -800)
+[node name="Spawn1" type="Marker3D" parent="SpawnPoints/Team1"]
+position = Vector3(42, 0, -36)
 
-[node name="Team2" type="Node2D" parent="SpawnPoints" unique_id=2037392804]
+[node name="Spawn2" type="Marker3D" parent="SpawnPoints/Team1"]
+position = Vector3(40, 0, -38)
 
-[node name="Spawn0" type="Marker2D" parent="SpawnPoints/Team2" unique_id=245748235]
-position = Vector2(-880, 760)
+[node name="Spawn3" type="Marker3D" parent="SpawnPoints/Team1"]
+position = Vector3(42, 0, -40)
 
-[node name="Spawn1" type="Marker2D" parent="SpawnPoints/Team2" unique_id=1709037430]
-position = Vector2(-840, 720)
+[node name="Spawn4" type="Marker3D" parent="SpawnPoints/Team1"]
+position = Vector3(44, 0, -40)
 
-[node name="Spawn2" type="Marker2D" parent="SpawnPoints/Team2" unique_id=1100793462]
-position = Vector2(-800, 760)
+[node name="Team2" type="Node3D" parent="SpawnPoints"]
 
-[node name="Spawn3" type="Marker2D" parent="SpawnPoints/Team2" unique_id=37937424]
-position = Vector2(-840, 800)
+[node name="Spawn0" type="Marker3D" parent="SpawnPoints/Team2"]
+position = Vector3(-44, 0, 38)
 
-[node name="Spawn4" type="Marker2D" parent="SpawnPoints/Team2" unique_id=1898829134]
-position = Vector2(-880, 800)
+[node name="Spawn1" type="Marker3D" parent="SpawnPoints/Team2"]
+position = Vector3(-42, 0, 36)
 
-[node name="Team3" type="Node2D" parent="SpawnPoints" unique_id=731604258]
+[node name="Spawn2" type="Marker3D" parent="SpawnPoints/Team2"]
+position = Vector3(-40, 0, 38)
 
-[node name="Spawn0" type="Marker2D" parent="SpawnPoints/Team3" unique_id=1451579344]
-position = Vector2(880, 760)
+[node name="Spawn3" type="Marker3D" parent="SpawnPoints/Team2"]
+position = Vector3(-42, 0, 40)
 
-[node name="Spawn1" type="Marker2D" parent="SpawnPoints/Team3" unique_id=104756034]
-position = Vector2(840, 720)
+[node name="Spawn4" type="Marker3D" parent="SpawnPoints/Team2"]
+position = Vector3(-44, 0, 40)
 
-[node name="Spawn2" type="Marker2D" parent="SpawnPoints/Team3" unique_id=1302728720]
-position = Vector2(800, 760)
+[node name="Team3" type="Node3D" parent="SpawnPoints"]
 
-[node name="Spawn3" type="Marker2D" parent="SpawnPoints/Team3" unique_id=1412440139]
-position = Vector2(840, 800)
+[node name="Spawn0" type="Marker3D" parent="SpawnPoints/Team3"]
+position = Vector3(44, 0, 38)
 
-[node name="Spawn4" type="Marker2D" parent="SpawnPoints/Team3" unique_id=1243846558]
-position = Vector2(880, 800)
+[node name="Spawn1" type="Marker3D" parent="SpawnPoints/Team3"]
+position = Vector3(42, 0, 36)
 
-[node name="ColorRect" type="ColorRect" parent="." unique_id=774969251]
-offset_left = -1100.0
-offset_top = -900.0
-offset_right = 1100.0
-offset_bottom = 900.0
-color = Color(0.101960786, 0.101960786, 0.13333334, 1)
+[node name="Spawn2" type="Marker3D" parent="SpawnPoints/Team3"]
+position = Vector3(40, 0, 38)
 
-[node name="Duvar" type="StaticBody2D" parent="." unique_id=1877578625]
-position = Vector2(1062, -919)
+[node name="Spawn3" type="Marker3D" parent="SpawnPoints/Team3"]
+position = Vector3(42, 0, 40)
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="Duvar" unique_id=697291090]
-position = Vector2(0, 979.5)
-shape = SubResource("RectangleShape2D_qj8ri")
+[node name="Spawn4" type="Marker3D" parent="SpawnPoints/Team3"]
+position = Vector3(44, 0, 40)
 
-[node name="ColorRect" type="ColorRect" parent="Duvar" unique_id=1599018782]
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -20.0
-offset_top = -20.0
-offset_right = 20.0
-offset_bottom = 1980.0
-grow_horizontal = 2
-grow_vertical = 2
-size_flags_horizontal = 4
-size_flags_vertical = 4
-color = Color(0.2901961, 0.26666668, 0.2509804, 1)
+[node name="Camera3D" type="Camera3D" parent="."]
+script = ExtResource("4_cam")
 
-[node name="LightOccluder2D" type="LightOccluder2D" parent="Duvar" unique_id=242044589]
-occluder = SubResource("OccluderPolygon2D_qj8ri")
-
-[node name="Duvar2" type="StaticBody2D" parent="." unique_id=484461957]
-position = Vector2(-1082, -946)
-
-[node name="CollisionShape2D" type="CollisionShape2D" parent="Duvar2" unique_id=1830013896]
-position = Vector2(0, 979.5)
-shape = SubResource("RectangleShape2D_qj8ri")
-
-[node name="ColorRect" type="ColorRect" parent="Duvar2" unique_id=2032717598]
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -20.0
-offset_top = -20.0
-offset_right = 20.0
-offset_bottom = 1980.0
-grow_horizontal = 2
-grow_vertical = 2
-size_flags_horizontal = 4
-size_flags_vertical = 4
-color = Color(0.2901961, 0.26666668, 0.2509804, 1)
-
-[node name="LightOccluder2D" type="LightOccluder2D" parent="Duvar2" unique_id=1709701680]
-occluder = SubResource("OccluderPolygon2D_qj8ri")
-
-[node name="Duvar3" type="StaticBody2D" parent="." unique_id=1752799503]
-position = Vector2(982, -916)
-rotation = 1.5707964
-
-[node name="CollisionShape2D" type="CollisionShape2D" parent="Duvar3" unique_id=1375533053]
-position = Vector2(0, 979.5)
-shape = SubResource("RectangleShape2D_qj8ri")
-
-[node name="ColorRect" type="ColorRect" parent="Duvar3" unique_id=1111310374]
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -20.0
-offset_top = -20.0
-offset_right = 20.0
-offset_bottom = 1980.0
-grow_horizontal = 2
-grow_vertical = 2
-size_flags_horizontal = 4
-size_flags_vertical = 4
-color = Color(0.2901961, 0.26666668, 0.2509804, 1)
-
-[node name="LightOccluder2D" type="LightOccluder2D" parent="Duvar3" unique_id=238521737]
-occluder = SubResource("OccluderPolygon2D_qj8ri")
-
-[node name="Duvar4" type="StaticBody2D" parent="." unique_id=880126818]
-position = Vector2(982, 924)
-rotation = 1.5707964
-
-[node name="CollisionShape2D" type="CollisionShape2D" parent="Duvar4" unique_id=1539885666]
-position = Vector2(0, 979.5)
-shape = SubResource("RectangleShape2D_qj8ri")
-
-[node name="ColorRect" type="ColorRect" parent="Duvar4" unique_id=1766838173]
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -20.0
-offset_top = -20.0
-offset_right = 20.0
-offset_bottom = 1980.0
-grow_horizontal = 2
-grow_vertical = 2
-size_flags_horizontal = 4
-size_flags_vertical = 4
-color = Color(0.2901961, 0.26666668, 0.2509804, 1)
-
-[node name="LightOccluder2D" type="LightOccluder2D" parent="Duvar4" unique_id=1740553770]
-occluder = SubResource("OccluderPolygon2D_qj8ri")
-
-[node name="Lights" type="Node2D" parent="." unique_id=1626259883]
-
-[node name="PointLight2D" type="PointLight2D" parent="Lights" unique_id=1130611730]
-position = Vector2(-988, -593)
-color = Color(1, 0.9411765, 0.8, 1)
-energy = 3.0
-shadow_enabled = true
-texture = SubResource("GradientTexture2D_wh2ss")
-offset = Vector2(2, 3)
-
-[node name="PointLight2D10" type="PointLight2D" parent="Lights" unique_id=1090511039]
-position = Vector2(-480, -828)
-color = Color(1, 0.9411765, 0.8, 1)
-energy = 3.0
-shadow_enabled = true
-texture = SubResource("GradientTexture2D_wh2ss")
-offset = Vector2(2, 3)
-
-[node name="PointLight2D11" type="PointLight2D" parent="Lights" unique_id=1963623218]
-position = Vector2(437, -793)
-color = Color(1, 0.9411765, 0.8, 1)
-energy = 3.0
-shadow_enabled = true
-texture = SubResource("GradientTexture2D_wh2ss")
-offset = Vector2(2, 3)
-
-[node name="PointLight2D12" type="PointLight2D" parent="Lights" unique_id=1014252611]
-position = Vector2(982, -275)
-color = Color(1, 0.9411765, 0.8, 1)
-energy = 3.0
-shadow_enabled = true
-texture = SubResource("GradientTexture2D_wh2ss")
-offset = Vector2(2, 3)
-
-[node name="PointLight2D13" type="PointLight2D" parent="Lights" unique_id=1281930936]
-position = Vector2(-442, 780)
-color = Color(1, 0.9411765, 0.8, 1)
-energy = 3.0
-shadow_enabled = true
-texture = SubResource("GradientTexture2D_wh2ss")
-offset = Vector2(2, 3)
-
-[node name="PointLight2D5" type="PointLight2D" parent="Lights" unique_id=506290277]
-position = Vector2(-21, 15)
-color = Color(1, 0.9411765, 0.8, 1)
-energy = 3.0
-shadow_enabled = true
-texture = SubResource("GradientTexture2D_wh2ss")
-offset = Vector2(2, 3)
-
-[node name="PointLight2D6" type="PointLight2D" parent="Lights" unique_id=1669819170]
-position = Vector2(-28, 647)
-color = Color(1, 0.9411765, 0.8, 1)
-energy = 3.0
-shadow_enabled = true
-texture = SubResource("GradientTexture2D_wh2ss")
-offset = Vector2(2, 3)
-
-[node name="PointLight2D7" type="PointLight2D" parent="Lights" unique_id=1925494179]
-position = Vector2(-793, -40)
-color = Color(1, 0.9411765, 0.8, 1)
-energy = 3.0
-shadow_enabled = true
-texture = SubResource("GradientTexture2D_wh2ss")
-offset = Vector2(2, 3)
-
-[node name="PointLight2D8" type="PointLight2D" parent="Lights" unique_id=83064561]
-position = Vector2(700, -88)
-color = Color(1, 0.9411765, 0.8, 1)
-energy = 3.0
-shadow_enabled = true
-texture = SubResource("GradientTexture2D_wh2ss")
-offset = Vector2(2, 3)
-
-[node name="PointLight2D9" type="PointLight2D" parent="Lights" unique_id=2051516154]
-position = Vector2(-11, -491)
-color = Color(1, 0.9411765, 0.8, 1)
-energy = 3.0
-shadow_enabled = true
-texture = SubResource("GradientTexture2D_wh2ss")
-offset = Vector2(2, 3)
-
-[node name="PointLight2D2" type="PointLight2D" parent="Lights" unique_id=707287509]
-position = Vector2(-503, 323)
-color = Color(1, 0.9411765, 0.8, 1)
-energy = 3.0
-shadow_enabled = true
-texture = SubResource("GradientTexture2D_wh2ss")
-offset = Vector2(2, 3)
-
-[node name="PointLight2D3" type="PointLight2D" parent="Lights" unique_id=1463742665]
-position = Vector2(597, 323)
-color = Color(1, 0.9411765, 0.8, 1)
-energy = 3.0
-shadow_enabled = true
-texture = SubResource("GradientTexture2D_wh2ss")
-offset = Vector2(2, 3)
-
-[node name="PointLight2D4" type="PointLight2D" parent="Lights" unique_id=1742441133]
-position = Vector2(606, -432)
-color = Color(1, 0.9411765, 0.8, 1)
-energy = 3.0
-shadow_enabled = true
-texture = SubResource("GradientTexture2D_wh2ss")
-offset = Vector2(2, 3)
+[node name="HUD" parent="." instance=ExtResource("3_hud")]

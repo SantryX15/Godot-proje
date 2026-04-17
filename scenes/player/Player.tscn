@@ -1,42 +1,67 @@
-[gd_scene load_steps=3 format=3 uid="uid://player001"]
+[gd_scene format=3 uid="uid://4any3bms6nmr"]
 
-[ext_resource type="Script" path="res://scenes/player/Player.gd" id="1_player"]
-[ext_resource type="Texture2D" path="res://icon.svg" id="2_icon"]
+[ext_resource type="Script" uid="uid://c77ypgatj76cv" path="res://scenes/player/Player.gd" id="1_player"]
 
-[sub_resource type="CircleShape2D" id="CircleShape2D_001"]
-radius = 14.0
+[sub_resource type="BoxMesh" id="BoxMesh_1"]
+size = Vector3(0.8, 1.8, 0.8)
 
-[node name="Player" type="CharacterBody2D"]
+[sub_resource type="BoxShape3D" id="BoxShape3D_1"]
+size = Vector3(0.8, 1.8, 0.8)
+
+[node name="Player" type="CharacterBody3D" unique_id=588909632]
 script = ExtResource("1_player")
 
-[node name="Sprite2D" type="Sprite2D" parent="."]
-texture = ExtResource("2_icon")
-scale = Vector2(0.22, 0.22)
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1894176869]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+mesh = SubResource("BoxMesh_1")
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
-shape = SubResource("CircleShape2D_001")
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=2040562293]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+shape = SubResource("BoxShape3D_1")
 
-[node name="WeaponHolder" type="Node2D" parent="."]
-position = Vector2(14, 0)
-
-[node name="Flashlight" type="PointLight2D" parent="."]
-color = Color(1, 0.95, 0.8, 1)
-energy = 1.5
-texture_scale = 2.5
+[node name="Flashlight" type="SpotLight3D" parent="." unique_id=1527407000]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2, 0)
+light_energy = 3.0
 shadow_enabled = true
-shadow_filter = 1
+spot_range = 26.0
+spot_attenuation = 1.0
+spot_angle = 45.0
 
-[node name="HealthBar" type="ProgressBar" parent="."]
-offset_left = -20.0
-offset_top = -30.0
-offset_right = 20.0
-offset_bottom = -22.0
-show_percentage = false
+[node name="BodyLight" type="OmniLight3D" parent="." unique_id=1098730031]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+light_energy = 2.0
+omni_range = 5.0
 
-[node name="NameLabel" type="Label" parent="."]
-offset_left = -30.0
-offset_top = -46.0
-offset_right = 30.0
-offset_bottom = -30.0
-horizontal_alignment = 1
+[node name="WeaponHolder" type="Node3D" parent="." unique_id=1414605041]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
 
+[node name="NameLabel" type="Label3D" parent="." unique_id=2128526105]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.4, 0)
+billboard = 2
+no_depth_test = true
+text = "Player"
+
+[node name="HealthLabel" type="Label3D" parent="." unique_id=30083217]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.1, 0)
+billboard = 2
+no_depth_test = true
+modulate = Color(0.9, 0.25, 0.25, 1)
+text = "❤ 100"
+font_size = 24
+
+[node name="AmmoLabel" type="Label3D" parent="." unique_id=254419521]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 0)
+billboard = 2
+no_depth_test = true
+modulate = Color(0.85, 0.85, 0.85, 1)
+text = "30/30"
+font_size = 20
+
+[node name="CardIndicatorLabel" type="Label3D" parent="." unique_id=1475143011]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.7, 0)
+visible = false
+billboard = 2
+no_depth_test = true
+modulate = Color(1, 0.9, 0.1, 1)
+text = "♦ KART"
+font_size = 28

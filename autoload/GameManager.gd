@@ -1,30 +1,42 @@
 ## GameManager.gd
-## Oyun durumunu, sahne geçişlerini ve spawn'ı yönetir.
+## Oyun durumunu, sahne geçişlerini, spawn'ı ve kart/kapı mekaniğini yönetir. (3D)
 
 extends Node
 
 signal game_started
 signal game_ended(winning_team: int)
 signal local_player_spawned(player: Node)
+signal card_picked_up(carrier_peer_id: int, carrier_pos: Vector3, carrier_team_id: int)
+signal card_dropped(drop_pos: Vector3)
+signal kill_happened(killer_peer_id: int, victim_peer_id: int)
 
 enum State { MENU, LOBBY, IN_GAME, ENDED }
 
 var state: State = State.MENU
 var player_scene: PackedScene = null
 var map_scene: PackedScene = null
+var card_scene: PackedScene = null
+var door_scene: PackedScene = null
 
 ## peer_id -> Player node referansı
 var active_players: Dictionary = {}
+
+## Kart durumu
+var card_instance: Node = null
+var door_instance: Node = null
+var card_carrier_peer_id: int = -1  # -1 = kart yerde
 
 
 func _ready() -> void:
 	player_scene = preload("res://scenes/player/Player.tscn")
 	map_scene = preload("res://scenes/world/Map.tscn")
+	card_scene = preload("res://scenes/world/Card.tscn")
+	door_scene = preload("res://scenes/world/Door.tscn")
 	TeamManager.team_won.connect(_on_team_won)
 
 
 # ─────────────────────────────────────────────
-# Oyun Başlatma (sadece sunucu çağırır)
+# Oyun Başlatma
 # ─────────────────────────────────────────────
 
 func start_game() -> void:
@@ -37,11 +49,15 @@ func start_game() -> void:
 @rpc("authority", "call_local", "reliable")
 func _start_game_rpc() -> void:
 	state = State.IN_GAME
-	# Haritayı yükle
+	card_carrier_peer_id = -1
+	card_instance = null
+	door_instance = null
 	get_tree().change_scene_to_packed(map_scene)
 	await get_tree().process_frame
 	await get_tree().process_frame
 	_spawn_local_player()
+	if NetworkManager.is_host():
+		_spawn_card_and_door()
 	emit_signal("game_started")
 
 
@@ -49,9 +65,9 @@ func _spawn_local_player() -> void:
 	var local_id := NetworkManager.get_local_id()
 	var player_data: Dictionary = NetworkManager.players.get(local_id, {})
 	var team_id: int = player_data.get("team_id", 0)
-	var spawn_pos := TeamManager.get_spawn_position(team_id)
+	var spawn_pos: Vector3 = TeamManager.get_spawn_position(team_id)
 
-	var player: CharacterBody2D = player_scene.instantiate()
+	var player: CharacterBody3D = player_scene.instantiate()
 	player.name = "Player_%d" % local_id
 	player.set_multiplayer_authority(local_id)
 	get_tree().current_scene.add_child(player)
@@ -60,24 +76,129 @@ func _spawn_local_player() -> void:
 
 	active_players[local_id] = player
 	emit_signal("local_player_spawned", player)
-	# Diğerlerine bildir
 	_notify_player_spawned.rpc(local_id, team_id, spawn_pos)
 
 
 @rpc("any_peer", "call_local", "reliable")
-func _notify_player_spawned(peer_id: int, team_id: int, pos: Vector2) -> void:
-	# Kendi spawn'ımızı zaten yaptık, başkalarını oluştur
+func _notify_player_spawned(peer_id: int, team_id: int, pos: Vector3) -> void:
 	if peer_id == NetworkManager.get_local_id():
 		return
 	if active_players.has(peer_id):
 		return
-	var player: CharacterBody2D = player_scene.instantiate()
+	var player: CharacterBody3D = player_scene.instantiate()
 	player.name = "Player_%d" % peer_id
 	player.set_multiplayer_authority(peer_id)
 	get_tree().current_scene.add_child(player)
 	player.global_position = pos
 	player.initialize(peer_id, team_id)
 	active_players[peer_id] = player
+
+
+# ─────────────────────────────────────────────
+# Kart + Kapı Spawn
+# ─────────────────────────────────────────────
+
+func _spawn_card_and_door() -> void:
+	var card_pos := Vector3(randf_range(-10.0, 10.0), 0.0, randf_range(-10.0, 10.0))
+	var corners: Array[Vector3] = [
+		Vector3(-47.0, 0.0, -42.0),
+		Vector3( 47.0, 0.0, -42.0),
+		Vector3(-47.0, 0.0,  42.0),
+		Vector3( 47.0, 0.0,  42.0),
+	]
+	var door_pos: Vector3 = corners[randi() % corners.size()]
+	_spawn_objects_rpc.rpc(card_pos, door_pos)
+
+
+@rpc("authority", "call_local", "reliable")
+func _spawn_objects_rpc(card_pos: Vector3, door_pos: Vector3) -> void:
+	var card: Node = card_scene.instantiate()
+	get_tree().current_scene.add_child(card)
+	card.global_position = card_pos
+	card_instance = card
+
+	var door: Node = door_scene.instantiate()
+	get_tree().current_scene.add_child(door)
+	door.global_position = door_pos
+	door_instance = door
+
+
+# ─────────────────────────────────────────────
+# Kart Alınması
+# ─────────────────────────────────────────────
+
+@rpc("any_peer", "reliable")
+func request_card_pickup(picker_peer_id: int) -> void:
+	if not NetworkManager.is_host():
+		return
+	if card_carrier_peer_id != -1:
+		return
+	handle_card_pickup(picker_peer_id)
+
+
+func handle_card_pickup(picker_peer_id: int) -> void:
+	if not NetworkManager.is_host():
+		return
+	if card_carrier_peer_id != -1:
+		return
+	var team_id: int = NetworkManager.players.get(picker_peer_id, {}).get("team_id", -1)
+	var player: Node = active_players.get(picker_peer_id)
+	var pos: Vector3 = player.global_position if player else Vector3.ZERO
+	_apply_card_pickup_rpc.rpc(picker_peer_id, pos, team_id)
+
+
+@rpc("authority", "call_local", "reliable")
+func _apply_card_pickup_rpc(carrier_peer_id: int, carrier_pos: Vector3, carrier_team_id: int) -> void:
+	card_carrier_peer_id = carrier_peer_id
+	if card_instance and is_instance_valid(card_instance):
+		card_instance.hide()
+	var player: Node = active_players.get(carrier_peer_id)
+	if player:
+		player.pick_up_card()
+	emit_signal("card_picked_up", carrier_peer_id, carrier_pos, carrier_team_id)
+
+
+# ─────────────────────────────────────────────
+# Kart Düşürülmesi
+# ─────────────────────────────────────────────
+
+func handle_card_drop(drop_pos: Vector3) -> void:
+	if not NetworkManager.is_host():
+		return
+	_apply_card_drop_rpc.rpc(drop_pos)
+
+
+@rpc("authority", "call_local", "reliable")
+func _apply_card_drop_rpc(drop_pos: Vector3) -> void:
+	card_carrier_peer_id = -1
+	for player in active_players.values():
+		if is_instance_valid(player) and player.has_card:
+			player.drop_card()
+	if card_instance and is_instance_valid(card_instance):
+		card_instance.global_position = drop_pos
+		card_instance.show()
+	emit_signal("card_dropped", drop_pos)
+
+
+# ─────────────────────────────────────────────
+# Kart Teslimatı
+# ─────────────────────────────────────────────
+
+@rpc("any_peer", "reliable")
+func request_card_delivery(carrier_peer_id: int) -> void:
+	if not NetworkManager.is_host():
+		return
+	if card_carrier_peer_id != carrier_peer_id:
+		return
+	handle_card_delivered(carrier_peer_id)
+
+
+func handle_card_delivered(carrier_peer_id: int) -> void:
+	if not NetworkManager.is_host():
+		return
+	var team_id: int = NetworkManager.players.get(carrier_peer_id, {}).get("team_id", -1)
+	state = State.ENDED
+	_end_game_rpc.rpc(team_id)
 
 
 # ─────────────────────────────────────────────
@@ -91,8 +212,20 @@ func handle_player_death(dead_peer_id: int, killer_peer_id: int) -> void:
 	var killing_team: int = killer_data.get("team_id", -1)
 	if killing_team >= 0:
 		TeamManager.add_kill(killing_team)
-	# 3 saniye bekle, sonra server tarafında respawn et (RPC yok — player.respawn() içinde yayar)
+
+	_announce_kill_rpc.rpc(killer_peer_id, dead_peer_id)
+
+	if card_carrier_peer_id == dead_peer_id:
+		var dead_player: Node = active_players.get(dead_peer_id)
+		var drop_pos: Vector3 = dead_player.global_position if dead_player else Vector3.ZERO
+		handle_card_drop(drop_pos)
+
 	_schedule_respawn(dead_peer_id)
+
+
+@rpc("authority", "call_local", "reliable")
+func _announce_kill_rpc(killer_peer_id: int, victim_peer_id: int) -> void:
+	emit_signal("kill_happened", killer_peer_id, victim_peer_id)
 
 
 func _schedule_respawn(dead_peer_id: int) -> void:
@@ -102,8 +235,7 @@ func _schedule_respawn(dead_peer_id: int) -> void:
 		return
 	var player_data: Dictionary = NetworkManager.players.get(dead_peer_id, {})
 	var team_id: int = player_data.get("team_id", 0)
-	var spawn_pos := TeamManager.get_spawn_position(team_id)
-	# player.respawn() içi _apply_respawn.rpc() çağırır → tüm clientlara yayılır
+	var spawn_pos: Vector3 = TeamManager.get_spawn_position(team_id)
 	player.respawn(spawn_pos)
 
 
@@ -126,6 +258,9 @@ func _end_game_rpc(winning_team: int) -> void:
 
 func return_to_menu() -> void:
 	active_players.clear()
+	card_instance = null
+	door_instance = null
+	card_carrier_peer_id = -1
 	state = State.MENU
 	NetworkManager.disconnect_all()
 	get_tree().change_scene_to_file("res://scenes/main/Main.tscn")

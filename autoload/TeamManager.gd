@@ -7,9 +7,9 @@ signal score_updated(team_id: int, new_score: int)
 signal team_won(team_id: int)
 
 const TEAM_COUNT := 4
-const MAX_SCORE := 30  # Kazanmak için gereken öldürme sayısı
+const MAX_SCORE := 30  # Artık kazanma koşulu değil, sadece referans
 
-## Takım renkleri (CharacterBody2D modulate için)
+## Takım renkleri
 const TEAM_COLORS: Array[Color] = [
 	Color(0.2, 0.6, 1.0),   # Takım 0 - Mavi
 	Color(1.0, 0.3, 0.3),   # Takım 1 - Kırmızı
@@ -22,7 +22,7 @@ const TEAM_NAMES: Array[String] = ["Mavi", "Kırmızı", "Yeşil", "Sarı"]
 ## team_id -> puan
 var scores: Dictionary = { 0: 0, 1: 0, 2: 0, 3: 0 }
 
-## Spawn noktaları (Map.tscn'de Node2D'lerin pozisyonları – Map tarafından doldurulur)
+## Spawn noktaları — Vector3 listesi, Map.gd tarafından doldurulur
 var spawn_points: Dictionary = { 0: [], 1: [], 2: [], 3: [] }
 
 
@@ -34,16 +34,20 @@ func add_kill(killing_team: int) -> void:
 	if not scores.has(killing_team):
 		return
 	scores[killing_team] += 1
-	emit_signal("score_updated", killing_team, scores[killing_team])
-	if scores[killing_team] >= MAX_SCORE:
-		emit_signal("team_won", killing_team)
+	_sync_score_rpc.rpc(killing_team, scores[killing_team])
 
 
-func get_spawn_position(team_id: int) -> Vector2:
+@rpc("authority", "call_local", "reliable")
+func _sync_score_rpc(team_id: int, new_score: int) -> void:
+	scores[team_id] = new_score
+	emit_signal("score_updated", team_id, new_score)
+
+
+func get_spawn_position(team_id: int) -> Vector3:
 	var points: Array = spawn_points.get(team_id, [])
 	if points.is_empty():
 		push_warning("Takım %d için spawn noktası yok!" % team_id)
-		return Vector2.ZERO
+		return Vector3.ZERO
 	return points[randi() % points.size()]
 
 

@@ -1,20 +1,23 @@
-[gd_scene load_steps=3 format=3 uid="uid://streetlamp001"]
+[gd_scene load_steps=3 format=3 uid="uid://streetlamp_3d_scene"]
 
 [ext_resource type="Script" path="res://scenes/lighting/StreetLamp.gd" id="1_lamp"]
-[ext_resource type="Texture2D" path="res://icon.svg" id="2_icon"]
 
-[node name="StreetLamp" type="Node2D"]
+[sub_resource type="CylinderMesh" id="CylinderMesh_1"]
+top_radius = 0.05
+bottom_radius = 0.06
+height = 3.5
+
+[node name="StreetLamp" type="Node3D"]
 script = ExtResource("1_lamp")
 
-[node name="Sprite2D" type="Sprite2D" parent="."]
-texture = ExtResource("2_icon")
-scale = Vector2(0.18, 0.18)
-modulate = Color(0.8, 0.8, 0.6, 1)
+[node name="Pole" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.75, 0)
+mesh = SubResource("CylinderMesh_1")
 
-[node name="PointLight2D" type="PointLight2D" parent="."]
-position = Vector2(0, -8)
-color = Color(1.0, 0.95, 0.75, 1.0)
-energy = 1.2
-texture_scale = 3.0
+[node name="OmniLight3D" type="OmniLight3D" parent="."]
+position = Vector3(0, 3.5, 0)
+light_color = Color(1, 0.94, 0.75, 1)
+light_energy = 4.0
 shadow_enabled = true
-shadow_filter = 1
+omni_range = 15.0
+omni_attenuation = 1.5

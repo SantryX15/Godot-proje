@@ -1,9 +1,9 @@
-## Map.gd
+## Map.gd (3D)
 ## Spawn noktalarını TeamManager'a kaydeder. Haritanın geri kalanı editörde yapılır.
 
-extends Node2D
+extends Node3D
 
-@onready var spawn_root: Node2D = $SpawnPoints
+@onready var spawn_root: Node3D = $SpawnPoints
 
 
 func _ready() -> void:
@@ -16,8 +16,8 @@ func _register_spawn_points() -> void:
 		if team_node == null:
 			push_warning("Spawn noktası bulunamadı: Team%d" % team_id)
 			continue
-		var points: Array[Vector2] = []
+		var points: Array[Vector3] = []
 		for child in team_node.get_children():
-			if child is Marker2D:
+			if child is Marker3D:
 				points.append(child.global_position)
 		TeamManager.register_spawn_points(team_id, points)

@@ -1,27 +1,15 @@
-[gd_scene load_steps=3 format=3 uid="uid://weapon001"]
+[gd_scene load_steps=2 format=3 uid="uid://weapon_3d_scene"]
 
 [ext_resource type="Script" path="res://scenes/weapons/Weapon.gd" id="1_weapon"]
-[ext_resource type="Texture2D" path="res://icon.svg" id="2_icon"]
 
-[node name="Weapon" type="Node2D"]
+[node name="Weapon" type="Node3D"]
 script = ExtResource("1_weapon")
 
-[node name="Sprite2D" type="Sprite2D" parent="."]
-texture = ExtResource("2_icon")
-scale = Vector2(0.1, 0.07)
-offset = Vector2(8, 0)
-
-[node name="Muzzle" type="Marker2D" parent="."]
-position = Vector2(20, 0)
+[node name="Muzzle" type="Marker3D" parent="."]
+position = Vector3(0, 0, -0.6)
 
 [node name="FireTimer" type="Timer" parent="."]
 one_shot = true
 
 [node name="ReloadTimer" type="Timer" parent="."]
 one_shot = true
-
-[node name="AmmoLabel" type="Label" parent="."]
-offset_left = -20.0
-offset_top = 16.0
-offset_right = 40.0
-offset_bottom = 30.0
