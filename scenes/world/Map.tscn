@@ -3,16 +3,27 @@
 [ext_resource type="Script" uid="uid://tm3sesnswm8k" path="res://scenes/world/Map.gd" id="1_map"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_qj8ri"]
-size = Vector2(40, 38)
+size = Vector2(40, 1997)
 
-[sub_resource type="OccluderPolygon2D" id="OccluderPolygon2D_i0nq5"]
-polygon = PackedVector2Array(-20, -19, 20, -19, 20, 20, -20, 20)
+[sub_resource type="OccluderPolygon2D" id="OccluderPolygon2D_qj8ri"]
+polygon = PackedVector2Array(-20, -18, 20, -18, 19, 1980, -20, 1980)
+
+[sub_resource type="Gradient" id="Gradient_i0nq5"]
+colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 0)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_wh2ss"]
+gradient = SubResource("Gradient_i0nq5")
+width = 256
+height = 256
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(1, 0.5)
 
 [node name="Map" type="Node2D" unique_id=109219864]
 script = ExtResource("1_map")
 
 [node name="CanvasModulate" type="CanvasModulate" parent="." unique_id=1196439018]
-color = Color(0.04, 0.04, 0.06, 1)
+color = Color(0.039215688, 0.039215688, 0.0627451, 1)
 
 [node name="SpawnPoints" type="Node2D" parent="." unique_id=293834801]
 
@@ -91,12 +102,14 @@ offset_right = 1100.0
 offset_bottom = 900.0
 color = Color(0.101960786, 0.101960786, 0.13333334, 1)
 
-[node name="StaticBody2D" type="StaticBody2D" parent="." unique_id=1877578625]
+[node name="Duvar" type="StaticBody2D" parent="." unique_id=1877578625]
+position = Vector2(1062, -919)
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="StaticBody2D" unique_id=697291090]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Duvar" unique_id=697291090]
+position = Vector2(0, 979.5)
 shape = SubResource("RectangleShape2D_qj8ri")
 
-[node name="ColorRect" type="ColorRect" parent="StaticBody2D" unique_id=1599018782]
+[node name="ColorRect" type="ColorRect" parent="Duvar" unique_id=1599018782]
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
@@ -105,12 +118,198 @@ anchor_bottom = 0.5
 offset_left = -20.0
 offset_top = -20.0
 offset_right = 20.0
-offset_bottom = 20.0
+offset_bottom = 1980.0
 grow_horizontal = 2
 grow_vertical = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-color = Color(0, 0.3773599, 0.37735993, 1)
+color = Color(0.2901961, 0.26666668, 0.2509804, 1)
 
-[node name="LightOccluder2D" type="LightOccluder2D" parent="StaticBody2D" unique_id=242044589]
-occluder = SubResource("OccluderPolygon2D_i0nq5")
+[node name="LightOccluder2D" type="LightOccluder2D" parent="Duvar" unique_id=242044589]
+occluder = SubResource("OccluderPolygon2D_qj8ri")
+
+[node name="Duvar2" type="StaticBody2D" parent="." unique_id=484461957]
+position = Vector2(-1082, -946)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Duvar2" unique_id=1830013896]
+position = Vector2(0, 979.5)
+shape = SubResource("RectangleShape2D_qj8ri")
+
+[node name="ColorRect" type="ColorRect" parent="Duvar2" unique_id=2032717598]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -20.0
+offset_top = -20.0
+offset_right = 20.0
+offset_bottom = 1980.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+color = Color(0.2901961, 0.26666668, 0.2509804, 1)
+
+[node name="LightOccluder2D" type="LightOccluder2D" parent="Duvar2" unique_id=1709701680]
+occluder = SubResource("OccluderPolygon2D_qj8ri")
+
+[node name="Duvar3" type="StaticBody2D" parent="." unique_id=1752799503]
+position = Vector2(982, -916)
+rotation = 1.5707964
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Duvar3" unique_id=1375533053]
+position = Vector2(0, 979.5)
+shape = SubResource("RectangleShape2D_qj8ri")
+
+[node name="ColorRect" type="ColorRect" parent="Duvar3" unique_id=1111310374]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -20.0
+offset_top = -20.0
+offset_right = 20.0
+offset_bottom = 1980.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+color = Color(0.2901961, 0.26666668, 0.2509804, 1)
+
+[node name="LightOccluder2D" type="LightOccluder2D" parent="Duvar3" unique_id=238521737]
+occluder = SubResource("OccluderPolygon2D_qj8ri")
+
+[node name="Duvar4" type="StaticBody2D" parent="." unique_id=880126818]
+position = Vector2(982, 924)
+rotation = 1.5707964
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Duvar4" unique_id=1539885666]
+position = Vector2(0, 979.5)
+shape = SubResource("RectangleShape2D_qj8ri")
+
+[node name="ColorRect" type="ColorRect" parent="Duvar4" unique_id=1766838173]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -20.0
+offset_top = -20.0
+offset_right = 20.0
+offset_bottom = 1980.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+color = Color(0.2901961, 0.26666668, 0.2509804, 1)
+
+[node name="LightOccluder2D" type="LightOccluder2D" parent="Duvar4" unique_id=1740553770]
+occluder = SubResource("OccluderPolygon2D_qj8ri")
+
+[node name="Lights" type="Node2D" parent="." unique_id=1626259883]
+
+[node name="PointLight2D" type="PointLight2D" parent="Lights" unique_id=1130611730]
+position = Vector2(-988, -593)
+color = Color(1, 0.9411765, 0.8, 1)
+energy = 3.0
+shadow_enabled = true
+texture = SubResource("GradientTexture2D_wh2ss")
+offset = Vector2(2, 3)
+
+[node name="PointLight2D10" type="PointLight2D" parent="Lights" unique_id=1090511039]
+position = Vector2(-480, -828)
+color = Color(1, 0.9411765, 0.8, 1)
+energy = 3.0
+shadow_enabled = true
+texture = SubResource("GradientTexture2D_wh2ss")
+offset = Vector2(2, 3)
+
+[node name="PointLight2D11" type="PointLight2D" parent="Lights" unique_id=1963623218]
+position = Vector2(437, -793)
+color = Color(1, 0.9411765, 0.8, 1)
+energy = 3.0
+shadow_enabled = true
+texture = SubResource("GradientTexture2D_wh2ss")
+offset = Vector2(2, 3)
+
+[node name="PointLight2D12" type="PointLight2D" parent="Lights" unique_id=1014252611]
+position = Vector2(982, -275)
+color = Color(1, 0.9411765, 0.8, 1)
+energy = 3.0
+shadow_enabled = true
+texture = SubResource("GradientTexture2D_wh2ss")
+offset = Vector2(2, 3)
+
+[node name="PointLight2D13" type="PointLight2D" parent="Lights" unique_id=1281930936]
+position = Vector2(-442, 780)
+color = Color(1, 0.9411765, 0.8, 1)
+energy = 3.0
+shadow_enabled = true
+texture = SubResource("GradientTexture2D_wh2ss")
+offset = Vector2(2, 3)
+
+[node name="PointLight2D5" type="PointLight2D" parent="Lights" unique_id=506290277]
+position = Vector2(-21, 15)
+color = Color(1, 0.9411765, 0.8, 1)
+energy = 3.0
+shadow_enabled = true
+texture = SubResource("GradientTexture2D_wh2ss")
+offset = Vector2(2, 3)
+
+[node name="PointLight2D6" type="PointLight2D" parent="Lights" unique_id=1669819170]
+position = Vector2(-28, 647)
+color = Color(1, 0.9411765, 0.8, 1)
+energy = 3.0
+shadow_enabled = true
+texture = SubResource("GradientTexture2D_wh2ss")
+offset = Vector2(2, 3)
+
+[node name="PointLight2D7" type="PointLight2D" parent="Lights" unique_id=1925494179]
+position = Vector2(-793, -40)
+color = Color(1, 0.9411765, 0.8, 1)
+energy = 3.0
+shadow_enabled = true
+texture = SubResource("GradientTexture2D_wh2ss")
+offset = Vector2(2, 3)
+
+[node name="PointLight2D8" type="PointLight2D" parent="Lights" unique_id=83064561]
+position = Vector2(700, -88)
+color = Color(1, 0.9411765, 0.8, 1)
+energy = 3.0
+shadow_enabled = true
+texture = SubResource("GradientTexture2D_wh2ss")
+offset = Vector2(2, 3)
+
+[node name="PointLight2D9" type="PointLight2D" parent="Lights" unique_id=2051516154]
+position = Vector2(-11, -491)
+color = Color(1, 0.9411765, 0.8, 1)
+energy = 3.0
+shadow_enabled = true
+texture = SubResource("GradientTexture2D_wh2ss")
+offset = Vector2(2, 3)
+
+[node name="PointLight2D2" type="PointLight2D" parent="Lights" unique_id=707287509]
+position = Vector2(-503, 323)
+color = Color(1, 0.9411765, 0.8, 1)
+energy = 3.0
+shadow_enabled = true
+texture = SubResource("GradientTexture2D_wh2ss")
+offset = Vector2(2, 3)
+
+[node name="PointLight2D3" type="PointLight2D" parent="Lights" unique_id=1463742665]
+position = Vector2(597, 323)
+color = Color(1, 0.9411765, 0.8, 1)
+energy = 3.0
+shadow_enabled = true
+texture = SubResource("GradientTexture2D_wh2ss")
+offset = Vector2(2, 3)
+
+[node name="PointLight2D4" type="PointLight2D" parent="Lights" unique_id=1742441133]
+position = Vector2(606, -432)
+color = Color(1, 0.9411765, 0.8, 1)
+energy = 3.0
+shadow_enabled = true
+texture = SubResource("GradientTexture2D_wh2ss")
+offset = Vector2(2, 3)

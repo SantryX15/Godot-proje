@@ -1,1 +1,6 @@
+PointLight2D
+Node2D
+LightOccluder2D
 ColorRect
+CollisionShape2D
+StaticBody2D
