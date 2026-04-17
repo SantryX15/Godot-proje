@@ -22,6 +22,7 @@ var is_local: bool = false
 
 var _target_position: Vector2 = Vector2.ZERO
 var _target_weapon_rotation: float = 0.0
+var _target_flashlight_rotation: float = 0.0
 var _sync_timer: float = 0.0
 const SYNC_RATE: float = 0.05
 
@@ -34,6 +35,12 @@ func initialize(p_peer_id: int, p_team_id: int) -> void:
 	modulate = TeamManager.get_color(team_id)
 	# El feneri koni texture'ı
 	flashlight.texture = _make_flashlight_texture()
+
+	# Yerel oyuncu sprite'ı karanlıktan etkilenmesin (unshaded)
+	if is_local:
+		var mat := CanvasItemMaterial.new()
+		mat.light_mode = CanvasItemMaterial.LIGHT_MODE_UNSHADED
+		sprite.material = mat
 
 	var player_data: Dictionary = NetworkManager.players.get(peer_id, {})
 	name_label.text = player_data.get("name", "???")
@@ -93,21 +100,25 @@ func _handle_local_input(delta: float) -> void:
 	_sync_timer += delta
 	if _sync_timer >= SYNC_RATE:
 		_sync_timer = 0.0
-		_broadcast_state.rpc(global_position, weapon_holder.rotation)
+		# Bağlı peer yoksa RPC gönderme (tek oyuncu / bağlantı kesilmiş)
+		if multiplayer.get_peers().size() > 0:
+			_broadcast_state.rpc(global_position, weapon_holder.rotation, flashlight.rotation)
 
 
 func _interpolate_remote(delta: float) -> void:
 	var t: float = minf(delta * 20.0, 1.0)
 	global_position = global_position.lerp(_target_position, t)
 	weapon_holder.rotation = lerp_angle(weapon_holder.rotation, _target_weapon_rotation, t)
+	flashlight.rotation = lerp_angle(flashlight.rotation, _target_flashlight_rotation, t)
 
 
 @rpc("any_peer", "unreliable_ordered")
-func _broadcast_state(pos: Vector2, weapon_rot: float) -> void:
+func _broadcast_state(pos: Vector2, weapon_rot: float, flash_rot: float) -> void:
 	if is_local:
 		return
 	_target_position = pos
 	_target_weapon_rotation = weapon_rot
+	_target_flashlight_rotation = flash_rot
 
 
 # ─────────────────────────────────────────────
@@ -198,3 +209,4 @@ static func _make_flashlight_texture() -> ImageTexture:
 			var alpha: float = pow(cone, 2.5) * pow(fade, 1.2)
 			img.set_pixel(x, y, Color(1.0, 0.97, 0.88, alpha))
 	return ImageTexture.create_from_image(img)
+
