@@ -45,11 +45,11 @@ func _build_ui() -> void:
 	center.anchor_right  = 0.5
 	center.anchor_top    = 0.5
 	center.anchor_bottom = 0.5
-	center.offset_left   = -520.0
-	center.offset_right  =  520.0
-	center.offset_top    = -270.0
-	center.offset_bottom =  270.0
-	center.add_theme_constant_override("separation", 18)
+	center.offset_left   = -560.0
+	center.offset_right  =  560.0
+	center.offset_top    = -310.0
+	center.offset_bottom =  310.0
+	center.add_theme_constant_override("separation", 14)
 	add_child(center)
 
 	var title := Label.new()
@@ -95,39 +95,138 @@ func _build_ui() -> void:
 	center.add_child(_status_lbl)
 
 
+func _find_anim_player(node: Node) -> AnimationPlayer:
+	if node is AnimationPlayer:
+		return node as AnimationPlayer
+	for child in node.get_children():
+		var result := _find_anim_player(child)
+		if result:
+			return result
+	return null
+
+
 func _build_card(char_data: Dictionary) -> PanelContainer:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(170, 260)
+	panel.custom_minimum_size = Vector2(190, 340)
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 8)
+	vbox.add_theme_constant_override("separation", 6)
 	panel.add_child(vbox)
 
-	var color_bar := ColorRect.new()
-	color_bar.color = char_data["color"] * Color(1, 1, 1, 0.45)
-	color_bar.custom_minimum_size = Vector2(0, 6)
-	vbox.add_child(color_bar)
+	# ── 3D karakter önizlemesi ──────────────────
+	var svc := SubViewportContainer.new()
+	svc.custom_minimum_size = Vector2(0, 165)
+	svc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	svc.stretch = true
+	vbox.add_child(svc)
+
+	var sv := SubViewport.new()
+	sv.size = Vector2i(190, 165)
+	sv.transparent_bg = false
+	sv.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	svc.add_child(sv)
+
+	var world := Node3D.new()
+	sv.add_child(world)
+
+	# Arka plan rengi (WorldEnvironment)
+	var env_node := WorldEnvironment.new()
+	var env_res  := Environment.new()
+	env_res.background_mode    = Environment.BG_COLOR
+	env_res.background_color   = Color(0.08, 0.08, 0.13, 1.0)
+	env_res.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env_res.ambient_light_color  = Color(0.25, 0.25, 0.32)
+	env_res.ambient_light_energy = 0.6
+	env_node.environment = env_res
+	world.add_child(env_node)
+
+	# Player.tscn'yi script olmadan (kodsuz) önizleme için kullan
+	var player_scene := preload("res://scenes/player/Player.tscn") as PackedScene
+	var player_inst: Node3D = player_scene.instantiate()
+	player_inst.set_script(null)
+	player_inst.get_node("NameLabel").visible          = false
+	player_inst.get_node("HealthLabel").visible        = false
+	player_inst.get_node("AmmoLabel").visible          = false
+	player_inst.get_node("CardIndicatorLabel").visible = false
+	player_inst.get_node("Flashlight").visible         = false
+	player_inst.get_node("BodyLight").visible          = false
+	world.add_child(player_inst)
+
+	# CharacterMesh içindeki AnimationPlayer'ı bul, mixamo_com animasyonunu ayarla
+	var char_mesh: Node3D = player_inst.get_node("CharacterMesh")
+	var ap := _find_anim_player(char_mesh)
+	if ap:
+		var candidates := ["mixamo_com", "mixamo.com", "Breathing Idle", "idle", "Idle"]
+		var anim_name := ""
+		for c in candidates:
+			if ap.has_animation(c):
+				anim_name = c
+				break
+		if anim_name.is_empty():
+			for a: StringName in ap.get_animation_list():
+				var s := a as String
+				if s != "RESET" and s != "Take 001":
+					anim_name = s
+					break
+		if not anim_name.is_empty():
+			var anim: Animation = ap.get_animation(anim_name)
+			if anim and anim.loop_mode == Animation.LOOP_NONE:
+				anim.loop_mode = Animation.LOOP_LINEAR
+			ap.autoplay = anim_name
+
+	# Karakterin rengiyle boyalı ana ışık
+	var key_light := OmniLight3D.new()
+	key_light.position    = Vector3(1.5, 3.0, 2.0)
+	key_light.light_color  = char_data["color"]
+	key_light.light_energy = 2.5
+	key_light.omni_range   = 9.0
+	world.add_child(key_light)
+
+	# Dolgu ışığı (nötr beyaz)
+	var fill_light := OmniLight3D.new()
+	fill_light.position    = Vector3(-1.2, 2.0, 1.5)
+	fill_light.light_energy = 1.0
+	fill_light.omni_range   = 7.0
+	world.add_child(fill_light)
+
+	# Kamera — karakterin üst gövdesini gösterir
+	var cam := Camera3D.new()
+	cam.position         = Vector3(0.0, 1.3, 2.5)
+	cam.rotation_degrees = Vector3(-8.0, 0.0, 0.0)
+	world.add_child(cam)
+
+	# ── İsim + Stat barları (kenarlara margin ile) ──
+	var content_margin := MarginContainer.new()
+	content_margin.add_theme_constant_override("margin_left",  10)
+	content_margin.add_theme_constant_override("margin_right", 10)
+	content_margin.add_theme_constant_override("margin_top",    4)
+	content_margin.add_theme_constant_override("margin_bottom", 0)
+	vbox.add_child(content_margin)
+
+	var content_vbox := VBoxContainer.new()
+	content_vbox.add_theme_constant_override("separation", 4)
+	content_margin.add_child(content_vbox)
 
 	var name_lbl := Label.new()
 	name_lbl.text = (char_data["name"] as String).to_upper()
 	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_lbl.add_theme_font_size_override("font_size", 18)
+	name_lbl.add_theme_font_size_override("font_size", 16)
 	name_lbl.modulate = char_data["color"]
-	vbox.add_child(name_lbl)
+	content_vbox.add_child(name_lbl)
 
 	var stats_box := VBoxContainer.new()
-	stats_box.add_theme_constant_override("separation", 5)
-	vbox.add_child(stats_box)
+	stats_box.add_theme_constant_override("separation", 3)
+	content_vbox.add_child(stats_box)
 
 	for stat_name: String in ["Can", "Hız", "Hasar", "Menzil"]:
 		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 6)
+		row.add_theme_constant_override("separation", 5)
 		stats_box.add_child(row)
 
 		var stat_lbl := Label.new()
 		stat_lbl.text = stat_name
 		stat_lbl.add_theme_font_size_override("font_size", 10)
-		stat_lbl.custom_minimum_size = Vector2(46, 0)
+		stat_lbl.custom_minimum_size = Vector2(42, 0)
 		stat_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		stat_lbl.modulate = STAT_COLORS[stat_name]
 		row.add_child(stat_lbl)
@@ -137,7 +236,7 @@ func _build_card(char_data: Dictionary) -> PanelContainer:
 		bar.max_value = 1.0
 		bar.value = (char_data["stats"] as Dictionary)[stat_name] / (STAT_MAX[stat_name] as float)
 		bar.show_percentage = false
-		bar.custom_minimum_size = Vector2(0, 13)
+		bar.custom_minimum_size = Vector2(0, 11)
 		bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		bar.modulate = STAT_COLORS[stat_name]
 		row.add_child(bar)
