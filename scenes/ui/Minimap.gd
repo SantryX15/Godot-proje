@@ -13,6 +13,7 @@ const SIZE := 180.0
 ## Kart alert (düşman kart aldığında 3 sn gösterilen son bilinen konum)
 var _alert_timer: float = 0.0
 var _alert_pos: Vector3 = Vector3.ZERO
+var _alert_color: Color = Color.RED
 
 
 func _ready() -> void:
@@ -71,8 +72,8 @@ func _draw() -> void:
 		var blink := (floori(_alert_timer * 5.0) % 2) == 0
 		if blink:
 			var p := _w2m(_alert_pos)
-			draw_circle(p, 7.0, Color(1.0, 0.15, 0.15, alpha))
-			draw_arc(p, 11.0, 0.0, TAU, 20, Color(1.0, 0.5, 0.1, alpha), 2.5)
+			draw_circle(p, 7.0, Color(_alert_color.r, _alert_color.g, _alert_color.b, alpha))
+			draw_arc(p, 11.0, 0.0, TAU, 20, Color(_alert_color.r, _alert_color.g, _alert_color.b, alpha * 0.7), 2.5)
 
 
 ## 3D dünya konumunu (X/Z) minimap koordinatına çevirir
@@ -86,5 +87,6 @@ func _on_card_picked_up(carrier_peer_id: int, carrier_pos: Vector3, carrier_team
 	var local_team: int = NetworkManager.players.get(local_id, {}).get("team_id", -1)
 	if carrier_team_id == local_team:
 		return
-	_alert_pos = carrier_pos
+	_alert_pos   = carrier_pos
+	_alert_color = TeamManager.get_color(carrier_team_id)
 	_alert_timer = 3.0
