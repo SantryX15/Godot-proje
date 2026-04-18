@@ -9,7 +9,6 @@ signal ammo_changed(current: int, total: int, reloading: bool)
 @export var speed: float = 8.0
 @export var max_health: float = 100.0
 
-@onready var mesh_instance: MeshInstance3D = $MeshInstance3D
 @onready var flashlight: SpotLight3D = $Flashlight
 @onready var body_light: OmniLight3D = $BodyLight
 @onready var health_label: Label3D = $HealthLabel
@@ -47,7 +46,8 @@ var current_weapon: Node = null
 var is_local: bool = false
 var has_card: bool = false
 
-var _base_material: StandardMaterial3D = null
+var _char_mesh: Node3D = null
+var _anim_player: AnimationPlayer = null
 var _target_position: Vector3 = Vector3.ZERO
 var _target_aim_y: float = 0.0
 var _sync_timer: float = 0.0
@@ -66,17 +66,11 @@ func initialize(p_peer_id: int, p_team_id: int, p_character: String = "Visioner"
 	floor_snap_length = 0.3  # Zemin tespitini güvenilir yapar, hız dalgalanmasını engeller
 	health = max_health
 
-	# Takım rengi materyal
-	_base_material = StandardMaterial3D.new()
-	_base_material.albedo_color = TeamManager.get_color(team_id)
-
-	# Yerel oyuncu: hafif emission — karanlıkta kendini görür
-	if is_local:
-		_base_material.emission_enabled = true
-		_base_material.emission = TeamManager.get_color(team_id)
-		_base_material.emission_energy_multiplier = 0.3
-
-	mesh_instance.set_surface_override_material(0, _base_material)
+	# FBX karakter mesh'ini bul
+	_char_mesh = get_node_or_null("CharacterMesh")
+	if _char_mesh:
+		_anim_player = _find_anim_player(_char_mesh)
+		_play_idle()
 
 	# Tüm billboard label'lar gizlendi — bilgiler ekran HUD'ında gösterilir
 	health_label.visible  = false
@@ -98,6 +92,53 @@ func initialize(p_peer_id: int, p_team_id: int, p_character: String = "Visioner"
 	reset_physics_interpolation()
 
 	_equip_default_weapon()
+
+
+func _find_anim_player(node: Node) -> AnimationPlayer:
+	if node is AnimationPlayer:
+		return node as AnimationPlayer
+	for child in node.get_children():
+		var result := _find_anim_player(child)
+		if result:
+			return result
+	return null
+
+
+func _play_idle() -> void:
+	if _anim_player == null:
+		return
+	var all_anims := _anim_player.get_animation_list()
+	if all_anims.is_empty():
+		return
+	# Tam isim eşleşmesi
+	var candidates := ["mixamo_com", "mixamo.com", "Breathing Idle", "idle", "Idle"]
+	var anim_name := ""
+	for c in candidates:
+		if _anim_player.has_animation(c):
+			anim_name = c
+			break
+	# Library prefix ile arama ("LibName/AnimName" formatı)
+	if anim_name.is_empty():
+		for c in candidates:
+			for a: StringName in all_anims:
+				var s := a as String
+				if s == c or s.ends_with("/" + c):
+					anim_name = s
+					break
+			if not anim_name.is_empty():
+				break
+	# Son çare: RESET dışındaki ilk animasyon
+	if anim_name.is_empty():
+		for a: StringName in all_anims:
+			if (a as String) != "RESET":
+				anim_name = a
+				break
+	if anim_name.is_empty():
+		return
+	var anim: Animation = _anim_player.get_animation(anim_name)
+	if anim and anim.loop_mode == Animation.LOOP_NONE:
+		anim.loop_mode = Animation.LOOP_LINEAR
+	_anim_player.play(anim_name)
 
 
 func _equip_default_weapon() -> void:
@@ -241,10 +282,8 @@ func _die(killer_peer_id: int) -> void:
 func _apply_death() -> void:
 	is_dead = true
 	has_card = false
-	var dead_mat := StandardMaterial3D.new()
-	dead_mat.albedo_color = Color(0.3, 0.3, 0.3, 0.5)
-	dead_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mesh_instance.set_surface_override_material(0, dead_mat)
+	if _char_mesh:
+		_char_mesh.visible = false
 	flashlight.visible = false
 	body_light.visible = false
 	collision_shape.set_deferred("disabled", true)
@@ -272,7 +311,9 @@ func _apply_respawn(spawn_pos: Vector3) -> void:
 	_target_position = spawn_pos
 	_card_pickup_blocked = 0.5
 	reset_physics_interpolation()
-	mesh_instance.set_surface_override_material(0, _base_material)
+	if _char_mesh:
+		_char_mesh.visible = true
+		_play_idle()
 	collision_shape.disabled = false
 	flashlight.visible = true
 	body_light.visible = is_local
