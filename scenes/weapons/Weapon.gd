@@ -11,6 +11,7 @@ signal ammo_changed(current: int, total: int, reloading: bool)
 @export var max_ammo: int = 30
 @export var reload_time: float = 1.8
 @export var spread_degrees: float = 2.0
+@export var is_semi_auto: bool = false
 
 @onready var muzzle: Marker3D = $Muzzle
 @onready var fire_timer: Timer = $FireTimer
@@ -80,6 +81,20 @@ func _spawn_bullet(
 # ─────────────────────────────────────────────
 # Yeniden Şarj
 # ─────────────────────────────────────────────
+
+func configure(config: Dictionary) -> void:
+	damage         = config.get("damage",         damage)
+	fire_rate      = config.get("fire_rate",      fire_rate)
+	bullet_speed   = config.get("bullet_speed",   bullet_speed)
+	max_ammo       = config.get("max_ammo",       max_ammo)
+	reload_time    = config.get("reload_time",    reload_time)
+	spread_degrees = config.get("spread_degrees", spread_degrees)
+	is_semi_auto   = config.get("is_semi_auto",   is_semi_auto)
+	current_ammo   = max_ammo
+	fire_timer.wait_time   = fire_rate
+	reload_timer.wait_time = reload_time
+	_update_ammo_label()
+
 
 func reload() -> void:
 	if is_reloading or current_ammo == max_ammo:

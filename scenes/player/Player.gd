@@ -30,6 +30,14 @@ const CHARACTER_STATS: Dictionary = {
 	"Medic":    {"health": 110.0, "speed": 7.5},
 }
 
+const WEAPON_CONFIGS: Dictionary = {
+	"Tank":     {"damage": 22.0,  "fire_rate": 0.10, "max_ammo": 30, "reload_time": 2.0, "spread_degrees": 3.0, "bullet_speed": 32.0, "is_semi_auto": false},
+	"Visioner": {"damage": 18.0,  "fire_rate": 0.09, "max_ammo": 28, "reload_time": 1.7, "spread_degrees": 2.5, "bullet_speed": 32.0, "is_semi_auto": false},
+	"Runner":   {"damage": 11.0,  "fire_rate": 0.06, "max_ammo": 40, "reload_time": 1.2, "spread_degrees": 4.5, "bullet_speed": 30.0, "is_semi_auto": false},
+	"Sniper":   {"damage": 120.0, "fire_rate": 0.5,  "max_ammo": 1,  "reload_time": 2.5, "spread_degrees": 0.0, "bullet_speed": 80.0, "is_semi_auto": true},
+	"Medic":    {"damage": 45.0,  "fire_rate": 0.4,  "max_ammo": 7,  "reload_time": 2.0, "spread_degrees": 1.5, "bullet_speed": 35.0, "is_semi_auto": true},
+}
+
 var peer_id: int = 0
 var team_id: int = -1
 var character_type: String = "Visioner"
@@ -100,6 +108,7 @@ func _equip_default_weapon() -> void:
 		current_weapon.ammo_changed.connect(
 			func(cur: int, tot: int, rel: bool): emit_signal("ammo_changed", cur, tot, rel)
 		)
+	current_weapon.configure(WEAPON_CONFIGS.get(character_type, WEAPON_CONFIGS["Visioner"]))
 
 
 # ─────────────────────────────────────────────
@@ -147,8 +156,13 @@ func _handle_local_input(delta: float) -> void:
 	if flat_flash.distance_to(flashlight.global_position) > 0.1:
 		flashlight.look_at(flat_flash, Vector3.UP)
 
-	# Ateş et
-	if Input.is_action_pressed("shoot") and current_weapon:
+	# Ateş et (semi-auto: sadece tıklama anında; otomatik: basılı tutunca)
+	var shoot_pressed: bool
+	if current_weapon and current_weapon.is_semi_auto:
+		shoot_pressed = Input.is_action_just_pressed("shoot")
+	else:
+		shoot_pressed = Input.is_action_pressed("shoot")
+	if shoot_pressed and current_weapon:
 		current_weapon.try_shoot(peer_id, team_id)
 
 	if Input.is_action_just_pressed("reload") and current_weapon:

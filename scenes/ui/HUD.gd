@@ -120,6 +120,9 @@ func _on_local_player_spawned(player: Node) -> void:
 	player.ammo_changed.connect(_on_ammo_changed)
 	_health_bar.max_value = player.max_health
 	_on_health_changed(player.health)
+	# Başlangıç ammo göstergesini karakter silahına göre ayarla
+	if player.current_weapon:
+		_on_ammo_changed(player.current_weapon.current_ammo, player.current_weapon.max_ammo, false)
 
 
 func _on_health_changed(new_health: float) -> void:
