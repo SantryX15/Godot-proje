@@ -303,6 +303,22 @@ func on_player_disconnected(peer_id: int) -> void:
 	if p and is_instance_valid(p):
 		p.queue_free()
 	active_players.erase(peer_id)
+	_check_last_team_standing()
+
+
+func _check_last_team_standing() -> void:
+	if not NetworkManager.is_host():
+		return
+	if state != State.IN_GAME:
+		return
+	var active_teams: Dictionary = {}
+	for pid in NetworkManager.players:
+		var tid: int = NetworkManager.players[pid].get("team_id", -1)
+		if tid >= 0:
+			active_teams[tid] = true
+	if active_teams.size() == 1:
+		state = State.ENDED
+		_end_game_rpc.rpc(active_teams.keys()[0])
 
 
 # ─────────────────────────────────────────────

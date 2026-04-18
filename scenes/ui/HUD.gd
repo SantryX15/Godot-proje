@@ -22,7 +22,7 @@ var _health_bar: ProgressBar = null
 var _health_value_label: Label = null
 var _ammo_label_hud: Label = null
 var _scoreboard_panel: PanelContainer = null
-var _scoreboard_grid: GridContainer = null
+var _scoreboard_content: VBoxContainer = null
 var _scoreboard_visible: bool = false
 
 const KILL_FEED_MAX := 5
@@ -202,14 +202,14 @@ func _setup_scoreboard() -> void:
 	_scoreboard_panel.anchor_right  = 0.5
 	_scoreboard_panel.anchor_top    = 0.08
 	_scoreboard_panel.anchor_bottom = 0.08
-	_scoreboard_panel.offset_left   = -280.0
-	_scoreboard_panel.offset_right  = 280.0
+	_scoreboard_panel.offset_left   = -300.0
+	_scoreboard_panel.offset_right  = 300.0
 	_scoreboard_panel.offset_top    = 0.0
-	_scoreboard_panel.offset_bottom = 420.0
+	_scoreboard_panel.offset_bottom = 480.0
 
 	var vbox := VBoxContainer.new()
 	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
-	vbox.add_theme_constant_override("separation", 6)
+	vbox.add_theme_constant_override("separation", 8)
 	_scoreboard_panel.add_child(vbox)
 
 	var title := Label.new()
@@ -220,87 +220,99 @@ func _setup_scoreboard() -> void:
 
 	vbox.add_child(HSeparator.new())
 
-	# 4 sütun: Oyuncu | Takım | Kill | Ölüm
-	_scoreboard_grid = GridContainer.new()
-	_scoreboard_grid.columns = 4
-	_scoreboard_grid.add_theme_constant_override("h_separation", 10)
-	_scoreboard_grid.add_theme_constant_override("v_separation", 5)
-	vbox.add_child(_scoreboard_grid)
+	_scoreboard_content = VBoxContainer.new()
+	_scoreboard_content.add_theme_constant_override("separation", 10)
+	vbox.add_child(_scoreboard_content)
 
 	_scoreboard_panel.hide()
 	add_child(_scoreboard_panel)
 
 
 func _refresh_scoreboard() -> void:
-	for child in _scoreboard_grid.get_children():
+	for child in _scoreboard_content.get_children():
 		child.queue_free()
 
-	var col_widths := [190.0, 90.0, 55.0, 55.0]
-	var col_headers := ["Oyuncu", "Takım", "Kill", "Ölüm"]
-
-	# Başlık satırı
-	for i in range(4):
-		var h := Label.new()
-		h.text = col_headers[i]
-		h.add_theme_font_size_override("font_size", 12)
-		h.modulate = Color(0.6, 0.6, 0.6)
-		h.custom_minimum_size = Vector2(col_widths[i], 0)
-		if i >= 2:
-			h.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_scoreboard_grid.add_child(h)
-
-	# Separator çizgisi (4 hücre)
-	for _i in range(4):
-		_scoreboard_grid.add_child(HSeparator.new())
-
-	# Kill sayısına göre sırala
 	var local_id := NetworkManager.get_local_id()
-	var peers: Array = NetworkManager.players.keys()
-	peers.sort_custom(func(a: int, b: int) -> bool:
-		var ka: int = GameManager.player_stats.get(a, {"kills": 0})["kills"]
-		var kb: int = GameManager.player_stats.get(b, {"kills": 0})["kills"]
-		return ka > kb
+
+	# Oyuncuları takımlara göre grupla
+	var teams: Dictionary = {}  # team_id -> Array[int]
+	for pid in NetworkManager.players:
+		var data: Dictionary = NetworkManager.players[pid]
+		var tid: int = data.get("team_id", -1)
+		if tid < 0:
+			continue
+		if not teams.has(tid):
+			teams[tid] = []
+		teams[tid].append(int(pid))
+
+	# Takımları kill skoruna göre sırala (yüksekten düşüğe)
+	var team_ids: Array = teams.keys()
+	team_ids.sort_custom(func(a: int, b: int) -> bool:
+		return TeamManager.scores.get(a, 0) > TeamManager.scores.get(b, 0)
 	)
 
-	for pid in peers:
-		var data: Dictionary = NetworkManager.players[pid]
-		var stats: Dictionary = GameManager.player_stats.get(pid, {"kills": 0, "deaths": 0})
-		var team_id: int = data.get("team_id", -1)
-		var team_color: Color = TeamManager.get_color(team_id)
-		var is_me: bool = (int(pid) == local_id)
+	var col_widths := [230.0, 55.0, 55.0]
 
-		# İsim
-		var name_lbl := Label.new()
-		name_lbl.text = "%s%s" % [data.get("name", "???"), "  ◄" if is_me else ""]
-		name_lbl.add_theme_font_size_override("font_size", 14)
-		name_lbl.custom_minimum_size = Vector2(col_widths[0], 0)
-		name_lbl.modulate = team_color if is_me else Color.WHITE
-		_scoreboard_grid.add_child(name_lbl)
+	for tid in team_ids:
+		var team_color: Color = TeamManager.get_color(tid)
+		var team_peers: Array = teams[tid]
 
-		# Takım
-		var team_lbl := Label.new()
-		team_lbl.text = TeamManager.get_team_name(team_id)
-		team_lbl.add_theme_font_size_override("font_size", 14)
-		team_lbl.modulate = team_color
-		team_lbl.custom_minimum_size = Vector2(col_widths[1], 0)
-		_scoreboard_grid.add_child(team_lbl)
+		# Takım başlık satırı
+		var header := PanelContainer.new()
+		var hstyle := StyleBoxFlat.new()
+		hstyle.bg_color = team_color * Color(1.0, 1.0, 1.0, 0.2)
+		hstyle.set_content_margin_all(6.0)
+		header.add_theme_stylebox_override("panel", hstyle)
 
-		# Kill
-		var k_lbl := Label.new()
-		k_lbl.text = str(stats.get("kills", 0))
-		k_lbl.add_theme_font_size_override("font_size", 14)
-		k_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		k_lbl.custom_minimum_size = Vector2(col_widths[2], 0)
-		_scoreboard_grid.add_child(k_lbl)
+		var header_lbl := Label.new()
+		var team_kills: int = TeamManager.scores.get(tid, 0)
+		header_lbl.text = "%s  —  %d kill" % [TeamManager.get_team_name(tid).to_upper(), team_kills]
+		header_lbl.modulate = team_color
+		header_lbl.add_theme_font_size_override("font_size", 14)
+		header.add_child(header_lbl)
+		_scoreboard_content.add_child(header)
 
-		# Ölüm
-		var d_lbl := Label.new()
-		d_lbl.text = str(stats.get("deaths", 0))
-		d_lbl.add_theme_font_size_override("font_size", 14)
-		d_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		d_lbl.modulate = Color(0.85, 0.4, 0.4)
-		d_lbl.custom_minimum_size = Vector2(col_widths[3], 0)
-		_scoreboard_grid.add_child(d_lbl)
+		# Oyuncuları kill'e göre sırala
+		team_peers.sort_custom(func(a: int, b: int) -> bool:
+			var ka: int = GameManager.player_stats.get(a, {"kills": 0})["kills"]
+			var kb: int = GameManager.player_stats.get(b, {"kills": 0})["kills"]
+			return ka > kb
+		)
+
+		# Oyuncu grid (Oyuncu | Kill | Ölüm)
+		var grid := GridContainer.new()
+		grid.columns = 3
+		grid.add_theme_constant_override("h_separation", 10)
+		grid.add_theme_constant_override("v_separation", 4)
+
+		for pid in team_peers:
+			var data: Dictionary = NetworkManager.players[pid]
+			var stats: Dictionary = GameManager.player_stats.get(pid, {"kills": 0, "deaths": 0})
+			var is_me: bool = (pid == local_id)
+
+			var name_lbl := Label.new()
+			name_lbl.text = "%s%s" % [data.get("name", "???"), "  ◄" if is_me else ""]
+			name_lbl.add_theme_font_size_override("font_size", 14)
+			name_lbl.custom_minimum_size = Vector2(col_widths[0], 0)
+			name_lbl.modulate = team_color if is_me else Color.WHITE
+			grid.add_child(name_lbl)
+
+			var k_lbl := Label.new()
+			k_lbl.text = str(stats.get("kills", 0))
+			k_lbl.add_theme_font_size_override("font_size", 14)
+			k_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			k_lbl.custom_minimum_size = Vector2(col_widths[1], 0)
+			grid.add_child(k_lbl)
+
+			var d_lbl := Label.new()
+			d_lbl.text = str(stats.get("deaths", 0))
+			d_lbl.add_theme_font_size_override("font_size", 14)
+			d_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			d_lbl.modulate = Color(0.85, 0.4, 0.4)
+			d_lbl.custom_minimum_size = Vector2(col_widths[2], 0)
+			grid.add_child(d_lbl)
+
+		_scoreboard_content.add_child(grid)
 
 
 func _process(_delta: float) -> void:
