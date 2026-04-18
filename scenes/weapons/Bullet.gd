@@ -9,7 +9,7 @@ var damage: float = 25.0
 var shooter_peer_id: int = -1
 var shooter_team_id: int = -1
 
-const MAX_DISTANCE: float = 60.0
+var max_distance: float = 60.0
 var _travel_distance: float = 0.0
 
 
@@ -18,7 +18,8 @@ func initialize(
 	spd: float,
 	dmg: float,
 	peer_id: int,
-	team_id: int
+	team_id: int,
+	p_max_distance: float = 60.0
 ) -> void:
 	direction = dir.normalized()
 	direction.y = 0.0  # Yatay düzlemde kal
@@ -26,13 +27,14 @@ func initialize(
 	damage = dmg
 	shooter_peer_id = peer_id
 	shooter_team_id = team_id
+	max_distance = p_max_distance
 
 
 func _physics_process(delta: float) -> void:
 	var move := direction * speed * delta
 	global_position += move
 	_travel_distance += move.length()
-	if _travel_distance >= MAX_DISTANCE:
+	if _travel_distance >= max_distance:
 		queue_free()
 
 

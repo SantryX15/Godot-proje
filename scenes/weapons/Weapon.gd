@@ -12,6 +12,7 @@ signal ammo_changed(current: int, total: int, reloading: bool)
 @export var reload_time: float = 1.8
 @export var spread_degrees: float = 2.0
 @export var is_semi_auto: bool = false
+@export var max_distance: float = 60.0
 
 @onready var muzzle: Marker3D = $Muzzle
 @onready var fire_timer: Timer = $FireTimer
@@ -59,7 +60,7 @@ func try_shoot(shooter_peer_id: int, shooter_team_id: int) -> void:
 	var spread_rot := Basis(Vector3.UP, spread_rad)
 	var direction := (spread_rot * forward).normalized()
 
-	_spawn_bullet.rpc(muzzle.global_position, direction, shooter_peer_id, shooter_team_id)
+	_spawn_bullet.rpc(muzzle.global_position, direction, shooter_peer_id, shooter_team_id, max_distance)
 
 	if current_ammo <= 0:
 		reload()
@@ -70,12 +71,13 @@ func _spawn_bullet(
 	spawn_pos: Vector3,
 	direction: Vector3,
 	shooter_peer_id: int,
-	shooter_team_id: int
+	shooter_team_id: int,
+	p_max_distance: float
 ) -> void:
 	var bullet: Node3D = bullet_scene.instantiate()
 	get_tree().current_scene.add_child(bullet)
 	bullet.global_position = spawn_pos
-	bullet.initialize(direction, bullet_speed, damage, shooter_peer_id, shooter_team_id)
+	bullet.initialize(direction, bullet_speed, damage, shooter_peer_id, shooter_team_id, p_max_distance)
 
 
 # ─────────────────────────────────────────────
@@ -90,6 +92,7 @@ func configure(config: Dictionary) -> void:
 	reload_time    = config.get("reload_time",    reload_time)
 	spread_degrees = config.get("spread_degrees", spread_degrees)
 	is_semi_auto   = config.get("is_semi_auto",   is_semi_auto)
+	max_distance   = config.get("max_distance",   max_distance)
 	current_ammo   = max_ammo
 	fire_timer.wait_time   = fire_rate
 	reload_timer.wait_time = reload_time
