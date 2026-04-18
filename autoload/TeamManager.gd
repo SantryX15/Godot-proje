@@ -48,7 +48,8 @@ func get_spawn_position(team_id: int) -> Vector3:
 	if points.is_empty():
 		push_warning("Takım %d için spawn noktası yok!" % team_id)
 		return Vector3.ZERO
-	return points[randi() % points.size()]
+	var base: Vector3 = points[randi() % points.size()]
+	return base + Vector3(randf_range(-2.5, 2.5), 0.0, randf_range(-2.5, 2.5))
 
 
 func get_color(team_id: int) -> Color:

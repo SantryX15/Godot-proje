@@ -301,12 +301,30 @@ func _set_ready_rpc(peer_id: int, is_ready: bool) -> void:
 		_check_all_ready()
 
 
+func _are_teams_balanced() -> bool:
+	var team_counts: Dictionary = {}
+	for p in players.values():
+		var tid: int = p.get("team_id", -1)
+		if tid < 0:
+			continue
+		team_counts[tid] = team_counts.get(tid, 0) + 1
+	if team_counts.size() < 2:
+		return false
+	var count: int = team_counts[team_counts.keys()[0]]
+	for tid in team_counts:
+		if team_counts[tid] != count:
+			return false
+	return true
+
+
 func _check_all_ready() -> void:
 	if players.size() < 2:
 		return
 	for p in players.values():
 		if not p["is_ready"]:
 			return
+	if not _are_teams_balanced():
+		return
 	GameManager.start_game()
 
 
