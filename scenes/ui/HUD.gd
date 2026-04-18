@@ -265,8 +265,7 @@ func _refresh_scoreboard() -> void:
 		header.add_theme_stylebox_override("panel", hstyle)
 
 		var header_lbl := Label.new()
-		var team_kills: int = TeamManager.scores.get(tid, 0)
-		header_lbl.text = "%s  —  %d kill" % [TeamManager.get_team_name(tid).to_upper(), team_kills]
+		header_lbl.text = TeamManager.get_team_name(tid).to_upper()
 		header_lbl.modulate = team_color
 		header_lbl.add_theme_font_size_override("font_size", 14)
 		header.add_child(header_lbl)
