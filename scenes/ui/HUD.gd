@@ -17,6 +17,7 @@ var _minimap: Control = null
 var _alert_banner: Label = null
 var _banner_tween: Tween = null
 var _kill_feed_root: VBoxContainer = null
+var _pause_panel: PanelContainer = null
 
 const KILL_FEED_MAX := 5
 
@@ -31,6 +32,76 @@ func _ready() -> void:
 	_setup_minimap()
 	_setup_alert_banner()
 	_setup_kill_feed()
+	_setup_pause_menu()
+
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.keycode == KEY_ESCAPE and event.pressed and not event.echo:
+		# Oyun bitmişse ESC menüsü açılmasın (end_panel görünürdür)
+		if end_panel.visible:
+			return
+		_toggle_pause_menu()
+		get_viewport().set_input_as_handled()
+
+
+func _toggle_pause_menu() -> void:
+	_pause_panel.visible = not _pause_panel.visible
+
+
+func _setup_pause_menu() -> void:
+	# Arka plan overlay
+	var overlay := ColorRect.new()
+	overlay.color = Color(0.0, 0.0, 0.0, 0.45)
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+
+	_pause_panel = PanelContainer.new()
+	_pause_panel.anchor_left   = 0.5
+	_pause_panel.anchor_right  = 0.5
+	_pause_panel.anchor_top    = 0.5
+	_pause_panel.anchor_bottom = 0.5
+	_pause_panel.offset_left   = -140.0
+	_pause_panel.offset_right  = 140.0
+	_pause_panel.offset_top    = -110.0
+	_pause_panel.offset_bottom = 110.0
+	_pause_panel.add_child(overlay)
+
+	var vbox := VBoxContainer.new()
+	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 14)
+	_pause_panel.add_child(vbox)
+
+	var title := Label.new()
+	title.text = "— MENÜ —"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 20)
+	vbox.add_child(title)
+
+	var resume_btn := Button.new()
+	resume_btn.text = "Devam Et"
+	resume_btn.custom_minimum_size = Vector2(220, 42)
+	resume_btn.pressed.connect(_toggle_pause_menu)
+	vbox.add_child(resume_btn)
+
+	var leave_btn := Button.new()
+	leave_btn.text = "Ana Menüye Dön"
+	leave_btn.custom_minimum_size = Vector2(220, 42)
+	leave_btn.pressed.connect(_on_leave_pressed)
+	vbox.add_child(leave_btn)
+
+	var quit_btn := Button.new()
+	quit_btn.text = "Oyunu Kapat"
+	quit_btn.custom_minimum_size = Vector2(220, 42)
+	quit_btn.pressed.connect(get_tree().quit)
+	vbox.add_child(quit_btn)
+
+	_pause_panel.hide()
+	add_child(_pause_panel)
+
+
+func _on_leave_pressed() -> void:
+	_pause_panel.hide()
+	GameManager.return_to_menu()
 
 
 func _setup_minimap() -> void:

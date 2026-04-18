@@ -26,6 +26,10 @@ var card_instance: Node = null
 var door_instance: Node = null
 var card_carrier_peer_id: int = -1  # -1 = kart yerde
 
+## Migration: restore sırasında kullanılacak geçici pozisyonlar
+var _pending_card_pos: Vector3 = Vector3.ZERO
+var _pending_door_pos: Vector3 = Vector3.ZERO
+
 
 func _ready() -> void:
 	player_scene = preload("res://scenes/player/Player.tscn")
@@ -77,6 +81,9 @@ func _spawn_local_player() -> void:
 	active_players[local_id] = player
 	emit_signal("local_player_spawned", player)
 	_notify_player_spawned.rpc(local_id, team_id, spawn_pos)
+	# Mevcut oyuncuları talep et (migration / geç katılım için)
+	if not NetworkManager.is_host():
+		_request_active_players.rpc_id(1)
 
 
 @rpc("any_peer", "call_local", "reliable")
@@ -92,6 +99,20 @@ func _notify_player_spawned(peer_id: int, team_id: int, pos: Vector3) -> void:
 	player.global_position = pos
 	player.initialize(peer_id, team_id)
 	active_players[peer_id] = player
+
+
+## Client, bağlandıktan sonra host'tan mevcut aktif oyuncuları talep eder
+@rpc("any_peer", "reliable")
+func _request_active_players() -> void:
+	if not NetworkManager.is_host():
+		return
+	var requester := multiplayer.get_remote_sender_id()
+	for pid in active_players:
+		var p: Node = active_players[pid]
+		if not is_instance_valid(p):
+			continue
+		var pteam: int = NetworkManager.players.get(pid, {}).get("team_id", 0)
+		_notify_player_spawned.rpc_id(requester, pid, pteam, p.global_position)
 
 
 # ─────────────────────────────────────────────
@@ -254,6 +275,77 @@ func _on_team_won(team_id: int) -> void:
 func _end_game_rpc(winning_team: int) -> void:
 	state = State.ENDED
 	emit_signal("game_ended", winning_team)
+
+
+# ─────────────────────────────────────────────
+# Oyuncu Bağlantı Kesilmesi (host tarafından çağrılır)
+# ─────────────────────────────────────────────
+
+func on_player_disconnected(peer_id: int) -> void:
+	# Kart taşıyıcıysa kartı düşür
+	if card_carrier_peer_id == peer_id:
+		var player: Node = active_players.get(peer_id)
+		var drop_pos: Vector3 = player.global_position if player and is_instance_valid(player) else Vector3.ZERO
+		handle_card_drop(drop_pos)
+	# Player node'unu temizle
+	var p: Node = active_players.get(peer_id)
+	if p and is_instance_valid(p):
+		p.queue_free()
+	active_players.erase(peer_id)
+
+
+# ─────────────────────────────────────────────
+# Host Migration
+# ─────────────────────────────────────────────
+
+## Mevcut oyun durumunun anlık görüntüsü (migration öncesi kaydedilir)
+func get_migration_state() -> Dictionary:
+	var gstate := { "game_state": state }
+	if state != State.IN_GAME:
+		return gstate
+	# Kart pozisyonu: taşıyıcıda mı yoksa yerde mi?
+	var card_pos := Vector3.ZERO
+	if card_carrier_peer_id != -1:
+		var carrier: Node = active_players.get(card_carrier_peer_id)
+		if carrier and is_instance_valid(carrier):
+			card_pos = carrier.global_position
+	elif card_instance and is_instance_valid(card_instance):
+		card_pos = card_instance.global_position
+	var door_pos := Vector3.ZERO
+	if door_instance and is_instance_valid(door_instance):
+		door_pos = door_instance.global_position
+	gstate["scores"]   = TeamManager.scores.duplicate()
+	gstate["card_pos"] = card_pos
+	gstate["door_pos"] = door_pos
+	return gstate
+
+
+## Migration sonrası oyunu geri yükle (yeni host + yeniden bağlanan clientlar)
+func restore_from_migration(mig: Dictionary) -> void:
+	# Skorları geri yükle
+	var saved_scores: Dictionary = mig.get("scores", {})
+	for tid in saved_scores:
+		TeamManager.scores[tid] = int(saved_scores[tid])
+	_pending_card_pos = mig.get("card_pos", Vector3.ZERO)
+	_pending_door_pos = mig.get("door_pos", Vector3.ZERO)
+	# Oyun durumunu sıfırla
+	state = State.IN_GAME
+	card_carrier_peer_id = -1
+	card_instance = null
+	door_instance = null
+	for p in active_players.values():
+		if is_instance_valid(p):
+			p.queue_free()
+	active_players.clear()
+	# Haritayı yeniden yükle
+	get_tree().change_scene_to_packed(map_scene)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_spawn_local_player()
+	if NetworkManager.is_host():
+		# Kart ve kapıyı kaydedilen pozisyona spawn et
+		_spawn_objects_rpc.rpc(_pending_card_pos, _pending_door_pos)
+	emit_signal("game_started")
 
 
 func return_to_menu() -> void:

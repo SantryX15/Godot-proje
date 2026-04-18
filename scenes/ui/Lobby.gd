@@ -19,6 +19,7 @@ var is_ready: bool = false
 
 func _ready() -> void:
 	NetworkManager.player_list_updated.connect(_refresh_player_list)
+	NetworkManager.host_migrated.connect(_on_host_migrated)
 	GameManager.game_started.connect(_on_game_started)
 
 	start_btn.visible = NetworkManager.is_host()
@@ -78,6 +79,19 @@ func _on_start_btn_pressed() -> void:
 
 func _on_game_started() -> void:
 	pass  # GameManager sahne geçişini halleder
+
+
+func _on_host_migrated() -> void:
+	# Yeni host olduğumuzda başlat butonunu göster, başlığı güncelle
+	start_btn.visible = NetworkManager.is_host()
+	$Title.text = "Lobi  —  %s  |  Kod: %s" % [NetworkManager.room_name, RoomManager.room_code]
+	_refresh_player_list()
+
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.keycode == KEY_ESCAPE and event.pressed and not event.echo:
+		_on_back_pressed()
+		get_viewport().set_input_as_handled()
 
 
 func _on_back_pressed() -> void:

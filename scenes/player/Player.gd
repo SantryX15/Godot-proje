@@ -127,7 +127,7 @@ func _handle_local_input(delta: float) -> void:
 	_sync_timer += delta
 	if _sync_timer >= SYNC_RATE:
 		_sync_timer = 0.0
-		if multiplayer.get_peers().size() > 0:
+		if multiplayer.has_multiplayer_peer() and multiplayer.get_peers().size() > 0:
 			_broadcast_state.rpc(global_position, weapon_holder.rotation.y)
 
 

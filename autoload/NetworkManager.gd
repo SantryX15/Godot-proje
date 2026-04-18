@@ -10,6 +10,7 @@ signal player_connected(peer_id: int)
 signal player_disconnected(peer_id: int)
 signal player_list_updated
 signal kicked(reason: String)
+signal host_migrated  # Yeni host seçildi (lobby durumunda UI güncellemek için)
 
 const PORT := 7777
 const MAX_PLAYERS := 20  # 4 takım × 5 oyuncu
@@ -20,6 +21,13 @@ var local_player_name: String = ""
 var room_name: String = ""
 var _room_password: String = ""
 var _pending_password: String = ""
+
+## Migration
+var _saved_team_id: int = -1          # Kendi takımımız, migration boyunca korunur
+var _is_migrating: bool = false        # Migration sürecinde mi?
+var _pending_migration_state: Dictionary = {}  # Yeni host: bağlanan clientlara gönderilecek
+var _migration_players: Dictionary = {}        # Eski player listesi (peer_id → data)
+var _local_id_cache: int = 0           # get_unique_id() cache'i — peer kapandıktan sonra da kullanılabilir
 
 
 # ─────────────────────────────────────────────
@@ -36,6 +44,7 @@ func create_server(player_name: String, p_room_name: String = "", p_password: St
 		push_error("Sunucu oluşturulamadı: %s" % err)
 		return
 	multiplayer.multiplayer_peer = peer
+	_local_id_cache = 1  # Host her zaman 1
 	_connect_multiplayer_signals()
 	# Host kendini ekle
 	players[1] = { "name": local_player_name, "team_id": -1, "is_ready": false }
@@ -62,9 +71,14 @@ func disconnect_all() -> void:
 		multiplayer.multiplayer_peer.close()
 	multiplayer.multiplayer_peer = null
 	players.clear()
-	room_name      = ""
-	_room_password = ""
+	room_name         = ""
+	_room_password    = ""
 	_pending_password = ""
+	_is_migrating     = false
+	_saved_team_id    = -1
+	_local_id_cache   = 0
+	_pending_migration_state = {}
+	_migration_players       = {}
 	RoomManager.stop_hosting()
 	RoomManager.stop_listening()
 
@@ -82,6 +96,8 @@ func _connect_multiplayer_signals() -> void:
 		multiplayer.connected_to_server.connect(_on_connected_to_server)
 	if not multiplayer.connection_failed.is_connected(_on_connection_failed):
 		multiplayer.connection_failed.connect(_on_connection_failed)
+	if not multiplayer.server_disconnected.is_connected(_on_server_disconnected):
+		multiplayer.server_disconnected.connect(_on_server_disconnected)
 
 
 func _on_peer_connected(id: int) -> void:
@@ -94,11 +110,15 @@ func _on_peer_disconnected(id: int) -> void:
 	emit_signal("player_list_updated")
 	if multiplayer.is_server():
 		_broadcast_player_list()
+		# Oyun sırasında ayrılan oyuncunun node'unu temizle
+		if GameManager.state == GameManager.State.IN_GAME:
+			GameManager.on_player_disconnected(id)
 
 
 func _on_connected_to_server() -> void:
+	_local_id_cache = multiplayer.get_unique_id()  # Peer açıkken cache'le
 	# joined_server emit etmiyoruz — host _accept_player RPC'si ile onaylayacak
-	register_player.rpc_id(1, multiplayer.get_unique_id(), local_player_name, _pending_password)
+	register_player.rpc_id(1, _local_id_cache, local_player_name, _pending_password, _saved_team_id)
 
 
 func _on_connection_failed() -> void:
@@ -106,21 +126,95 @@ func _on_connection_failed() -> void:
 
 
 # ─────────────────────────────────────────────
+# Host Migration
+# ─────────────────────────────────────────────
+
+func _on_server_disconnected() -> void:
+	if _is_migrating:
+		return
+	_is_migrating = true
+
+	# Peer kapandıktan sonra get_unique_id() hata verir — cache kullan
+	var my_id := _local_id_cache
+	_saved_team_id = players.get(my_id, {}).get("team_id", -1)
+	_migration_players = players.duplicate(true)
+	_pending_migration_state = GameManager.get_migration_state()
+	var saved_room := room_name
+	var saved_pw   := _pending_password  # Client sadece bunu bilir (password)
+
+	# Bağlantıyı kapat
+	if multiplayer.multiplayer_peer:
+		multiplayer.multiplayer_peer.close()
+	multiplayer.multiplayer_peer = null
+
+	# Kalan peer'ları bul (eski host peer_id=1 hariç)
+	var remaining: Array = _migration_players.keys().filter(func(p): return p != 1)
+	remaining.sort()
+
+	if remaining.is_empty():
+		# Kimse kalmadı, ana menüye dön
+		_is_migrating = false
+		players.clear()
+		get_tree().change_scene_to_file("res://scenes/main/Main.tscn")
+		return
+
+	if my_id == remaining[0]:
+		# Ben yeni host oluyorum
+		await get_tree().create_timer(0.3).timeout
+		create_server(local_player_name, saved_room, saved_pw)
+		# Kendi player datasını migration bilgisiyle güncelle
+		players[1] = { "name": local_player_name, "team_id": _saved_team_id, "is_ready": false }
+		emit_signal("player_list_updated")
+		emit_signal("host_migrated")
+		_is_migrating = false
+		# Oyun durumuna göre sahneyi yönet
+		var gstate = _pending_migration_state.get("game_state", GameManager.State.MENU)
+		if gstate == GameManager.State.IN_GAME:
+			GameManager.restore_from_migration(_pending_migration_state)
+		else:
+			get_tree().change_scene_to_file.call_deferred("res://scenes/ui/Lobby.tscn")
+	else:
+		# Yeni hostu bekle ve yeniden bağlan
+		await get_tree().create_timer(1.5).timeout
+		RoomManager.start_listening()
+		_reconnect_loop(saved_room, saved_pw)
+
+
+func _reconnect_loop(target_room: String, password: String) -> void:
+	var timeout := 10.0
+	var elapsed := 0.0
+	while elapsed < timeout:
+		await get_tree().create_timer(0.5).timeout
+		elapsed += 0.5
+		for room in RoomManager.discovered_rooms.values():
+			if room.get("room_name", "") == target_room:
+				RoomManager.stop_listening()
+				join_server(room.get("ip", ""), local_player_name, password)
+				return
+	# Zaman aşımı: ana menüye dön
+	_is_migrating = false
+	RoomManager.stop_listening()
+	players.clear()
+	get_tree().change_scene_to_file("res://scenes/main/Main.tscn")
+
+
+# ─────────────────────────────────────────────
 # RPC: Oyuncu Kaydı
 # ─────────────────────────────────────────────
 
 @rpc("any_peer", "reliable")
-func register_player(peer_id: int, player_name: String, password: String) -> void:
+func register_player(peer_id: int, player_name: String, password: String, saved_team_id: int = -1) -> void:
 	if not multiplayer.is_server():
 		return
 	# Şifre kontrolü
 	if not _room_password.is_empty() and password != _room_password:
 		_reject_player.rpc_id(peer_id, "Yanlış şifre!")
 		return
-	players[peer_id] = { "name": player_name, "team_id": -1, "is_ready": false }
+	# Migration sırasında eski takım bilgisini koru
+	players[peer_id] = { "name": player_name, "team_id": saved_team_id, "is_ready": false }
 	# Yeni oyuncuya mevcut listeyi gönder, ardından kabul bildir
 	receive_player_list.rpc_id(peer_id, players)
-	_accept_player.rpc_id(peer_id)
+	_accept_player.rpc_id(peer_id, _pending_migration_state)
 	# Diğer herkese güncel listeyi gönder
 	_broadcast_player_list()
 	emit_signal("player_list_updated")
@@ -137,8 +231,15 @@ func receive_player_list(player_list: Dictionary) -> void:
 
 
 @rpc("authority", "reliable")
-func _accept_player() -> void:
-	emit_signal("joined_server")
+func _accept_player(migration_state: Dictionary = {}) -> void:
+	_is_migrating = false
+	var gstate = migration_state.get("game_state", -1)
+	if gstate == GameManager.State.IN_GAME:
+		RoomManager.stop_listening()
+		GameManager.restore_from_migration(migration_state)
+	else:
+		# Normal katılım veya lobby migration
+		emit_signal("joined_server")
 
 
 @rpc("authority", "reliable")
@@ -209,7 +310,9 @@ func _check_all_ready() -> void:
 # ─────────────────────────────────────────────
 
 func get_local_id() -> int:
-	return multiplayer.get_unique_id()
+	if multiplayer.has_multiplayer_peer():
+		return multiplayer.get_unique_id()
+	return _local_id_cache
 
 
 func is_host() -> bool:
