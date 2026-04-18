@@ -298,7 +298,6 @@ func _set_ready_rpc(peer_id: int, is_ready: bool) -> void:
 		players[peer_id]["is_ready"] = is_ready
 		_broadcast_player_list()
 		emit_signal("player_list_updated")
-		_check_all_ready()
 
 
 func _are_teams_balanced() -> bool:
@@ -317,15 +316,6 @@ func _are_teams_balanced() -> bool:
 	return true
 
 
-func _check_all_ready() -> void:
-	if players.size() < 2:
-		return
-	for p in players.values():
-		if not p["is_ready"]:
-			return
-	if not _are_teams_balanced():
-		return
-	GameManager.start_game()
 
 
 # ─────────────────────────────────────────────
