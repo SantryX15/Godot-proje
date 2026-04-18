@@ -3,6 +3,8 @@
 
 extends Node3D
 
+signal ammo_changed(current: int, total: int, reloading: bool)
+
 @export var damage: float = 25.0
 @export var fire_rate: float = 0.15
 @export var bullet_speed: float = 30.0
@@ -85,6 +87,7 @@ func reload() -> void:
 	is_reloading = true
 	if _ammo_label:
 		_ammo_label.text = "Şarj..."
+	emit_signal("ammo_changed", current_ammo, max_ammo, true)
 	reload_timer.start()
 	await reload_timer.timeout
 	current_ammo = max_ammo
@@ -102,3 +105,4 @@ func refill_ammo() -> void:
 func _update_ammo_label() -> void:
 	if _ammo_label:
 		_ammo_label.text = "%d/%d" % [current_ammo, max_ammo]
+	emit_signal("ammo_changed", current_ammo, max_ammo, false)

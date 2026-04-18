@@ -30,11 +30,13 @@ light_energy = 2.0
 omni_range = 5.0
 
 [node name="Label3D" type="Label3D" parent="."]
-position = Vector3(0, 1.2, 0)
+position = Vector3(0, 1.4, 0)
 billboard = 1
 no_depth_test = true
 text = "♦ KART"
-font_size = 28
-modulate = Color(1, 0.9, 0.1, 1)
+font_size = 64
+modulate = Color(1, 0.92, 0.1, 1)
+outline_size = 12
+outline_modulate = Color(0, 0, 0, 1)
 
 [connection signal="body_entered" from="." to="." method="_on_body_entered"]

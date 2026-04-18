@@ -7,7 +7,7 @@ signal game_started
 signal game_ended(winning_team: int)
 signal local_player_spawned(player: Node)
 signal card_picked_up(carrier_peer_id: int, carrier_pos: Vector3, carrier_team_id: int)
-signal card_dropped(drop_pos: Vector3)
+signal card_dropped(drop_pos: Vector3, carrier_team_id: int)
 signal kill_happened(killer_peer_id: int, victim_peer_id: int)
 
 enum State { MENU, LOBBY, IN_GAME, ENDED }
@@ -25,6 +25,9 @@ var active_players: Dictionary = {}
 var card_instance: Node = null
 var door_instance: Node = null
 var card_carrier_peer_id: int = -1  # -1 = kart yerde
+
+## Kişisel istatistikler: peer_id -> {kills, deaths}
+var player_stats: Dictionary = {}
 
 ## Migration: restore sırasında kullanılacak geçici pozisyonlar
 var _pending_card_pos: Vector3 = Vector3.ZERO
@@ -56,6 +59,7 @@ func _start_game_rpc() -> void:
 	card_carrier_peer_id = -1
 	card_instance = null
 	door_instance = null
+	player_stats.clear()
 	get_tree().change_scene_to_packed(map_scene)
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -186,11 +190,12 @@ func _apply_card_pickup_rpc(carrier_peer_id: int, carrier_pos: Vector3, carrier_
 func handle_card_drop(drop_pos: Vector3) -> void:
 	if not NetworkManager.is_host():
 		return
-	_apply_card_drop_rpc.rpc(drop_pos)
+	var carrier_team: int = NetworkManager.players.get(card_carrier_peer_id, {}).get("team_id", -1)
+	_apply_card_drop_rpc.rpc(drop_pos, carrier_team)
 
 
 @rpc("authority", "call_local", "reliable")
-func _apply_card_drop_rpc(drop_pos: Vector3) -> void:
+func _apply_card_drop_rpc(drop_pos: Vector3, carrier_team_id: int) -> void:
 	card_carrier_peer_id = -1
 	for player in active_players.values():
 		if is_instance_valid(player) and player.has_card:
@@ -198,7 +203,7 @@ func _apply_card_drop_rpc(drop_pos: Vector3) -> void:
 	if card_instance and is_instance_valid(card_instance):
 		card_instance.global_position = drop_pos
 		card_instance.show()
-	emit_signal("card_dropped", drop_pos)
+	emit_signal("card_dropped", drop_pos, carrier_team_id)
 
 
 # ─────────────────────────────────────────────
@@ -246,6 +251,12 @@ func handle_player_death(dead_peer_id: int, killer_peer_id: int) -> void:
 
 @rpc("authority", "call_local", "reliable")
 func _announce_kill_rpc(killer_peer_id: int, victim_peer_id: int) -> void:
+	if not player_stats.has(killer_peer_id):
+		player_stats[killer_peer_id] = {"kills": 0, "deaths": 0}
+	if not player_stats.has(victim_peer_id):
+		player_stats[victim_peer_id] = {"kills": 0, "deaths": 0}
+	player_stats[killer_peer_id]["kills"] += 1
+	player_stats[victim_peer_id]["deaths"] += 1
 	emit_signal("kill_happened", killer_peer_id, victim_peer_id)
 
 
@@ -350,6 +361,7 @@ func restore_from_migration(mig: Dictionary) -> void:
 
 func return_to_menu() -> void:
 	active_players.clear()
+	player_stats.clear()
 	card_instance = null
 	door_instance = null
 	card_carrier_peer_id = -1

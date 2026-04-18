@@ -214,7 +214,7 @@ func register_player(peer_id: int, player_name: String, password: String, saved_
 	players[peer_id] = { "name": player_name, "team_id": saved_team_id, "is_ready": false }
 	# Yeni oyuncuya mevcut listeyi gönder, ardından kabul bildir
 	receive_player_list.rpc_id(peer_id, players)
-	_accept_player.rpc_id(peer_id, _pending_migration_state)
+	_accept_player.rpc_id(peer_id, _pending_migration_state, room_name, RoomManager.room_code)
 	# Diğer herkese güncel listeyi gönder
 	_broadcast_player_list()
 	emit_signal("player_list_updated")
@@ -231,7 +231,12 @@ func receive_player_list(player_list: Dictionary) -> void:
 
 
 @rpc("authority", "reliable")
-func _accept_player(migration_state: Dictionary = {}) -> void:
+func _accept_player(migration_state: Dictionary = {}, p_room_name: String = "", p_room_code: String = "") -> void:
+	# Oda bilgisini client'a aktar
+	if not p_room_name.is_empty():
+		room_name = p_room_name
+	if not p_room_code.is_empty():
+		RoomManager.room_code = p_room_code
 	_is_migrating = false
 	var gstate = migration_state.get("game_state", -1)
 	if gstate == GameManager.State.IN_GAME:

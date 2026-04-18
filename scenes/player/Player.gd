@@ -3,6 +3,9 @@
 
 extends CharacterBody3D
 
+signal health_changed(new_health: float)
+signal ammo_changed(current: int, total: int, reloading: bool)
+
 @export var speed: float = 8.0
 @export var max_health: float = 100.0
 
@@ -53,10 +56,20 @@ func initialize(p_peer_id: int, p_team_id: int) -> void:
 
 	mesh_instance.set_surface_override_material(0, _base_material)
 
-	var player_data: Dictionary = NetworkManager.players.get(peer_id, {})
-	name_label.text = player_data.get("name", "???")
-	name_label.modulate = TeamManager.get_color(team_id)
-	health_label.text = "❤ 100"
+	# Tüm billboard label'lar gizlendi — bilgiler ekran HUD'ında gösterilir
+	health_label.visible  = false
+	name_label.visible    = false
+	ammo_label.visible    = false
+	card_indicator.visible = false
+
+	# Kart göstergesi: büyük, okunaklı
+	card_indicator.font_size       = 72
+	card_indicator.outline_size    = 14
+	card_indicator.outline_modulate = Color(0.0, 0.0, 0.0, 1.0)
+	card_indicator.no_depth_test   = true
+
+	# Body ışığı sadece yerel oyuncuda — uzak oyuncuların üzerinde hale olmasın
+	body_light.visible = is_local
 
 	_target_position = global_position
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_ON
@@ -69,6 +82,10 @@ func _equip_default_weapon() -> void:
 	var weapon_scene := preload("res://scenes/weapons/Weapon.tscn")
 	current_weapon = weapon_scene.instantiate()
 	weapon_holder.add_child(current_weapon)
+	if is_local:
+		current_weapon.ammo_changed.connect(
+			func(cur: int, tot: int, rel: bool): emit_signal("ammo_changed", cur, tot, rel)
+		)
 
 
 # ─────────────────────────────────────────────
@@ -179,7 +196,8 @@ func take_damage(amount: float, shooter_peer_id: int) -> void:
 @rpc("any_peer", "call_local", "reliable")
 func _sync_health(new_health: float) -> void:
 	health = new_health
-	health_label.text = "❤ %d" % int(health)
+	if is_local:
+		emit_signal("health_changed", health)
 
 
 # ─────────────────────────────────────────────
@@ -220,7 +238,8 @@ func _apply_respawn(spawn_pos: Vector3) -> void:
 	is_dead = false
 	has_card = false
 	health = max_health
-	health_label.text = "❤ %d" % int(health)
+	if is_local:
+		emit_signal("health_changed", health)
 	global_position = spawn_pos
 	_target_position = spawn_pos
 	_card_pickup_blocked = 0.5
@@ -228,7 +247,7 @@ func _apply_respawn(spawn_pos: Vector3) -> void:
 	mesh_instance.set_surface_override_material(0, _base_material)
 	collision_shape.disabled = false
 	flashlight.visible = true
-	body_light.visible = true
+	body_light.visible = is_local
 	card_indicator.visible = false
 	if current_weapon:
 		current_weapon.show()
@@ -241,7 +260,10 @@ func _apply_respawn(spawn_pos: Vector3) -> void:
 
 func pick_up_card() -> void:
 	has_card = true
-	card_indicator.visible = true
+	# Sadece taşıyıcının kendi takımı (ve kendisi) görür
+	var local_id  := NetworkManager.get_local_id()
+	var local_team: int = NetworkManager.players.get(local_id, {}).get("team_id", -1)
+	card_indicator.visible = (local_team == team_id)
 
 
 func drop_card() -> void:
