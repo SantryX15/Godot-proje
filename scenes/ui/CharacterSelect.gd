@@ -6,12 +6,20 @@
 extends Control
 
 const CHARACTERS: Array[Dictionary] = [
-	{"name": "Tank",     "desc": "150 can\nHız: 5.5",  "color": Color(0.9,  0.35, 0.25)},
-	{"name": "Visioner", "desc": "100 can\nHız: 8",    "color": Color(0.25, 0.55, 1.0)},
-	{"name": "Runner",   "desc": "75 can\nHız: 13",    "color": Color(0.25, 0.9,  0.35)},
-	{"name": "Sniper",   "desc": "80 can\nHız: 7",     "color": Color(0.95, 0.85, 0.15)},
-	{"name": "Medic",    "desc": "110 can\nHız: 7.5",  "color": Color(0.85, 0.35, 0.95)},
+	{"name": "Tank",     "color": Color(0.9,  0.35, 0.25), "stats": {"Can": 150.0, "Hız": 5.5,  "Hasar": 22.0,  "Menzil": 45.0}},
+	{"name": "Visioner", "color": Color(0.25, 0.55, 1.0),  "stats": {"Can": 100.0, "Hız": 8.0,  "Hasar": 18.0,  "Menzil": 35.0}},
+	{"name": "Runner",   "color": Color(0.25, 0.9,  0.35), "stats": {"Can": 75.0,  "Hız": 13.0, "Hasar": 11.0,  "Menzil": 25.0}},
+	{"name": "Sniper",   "color": Color(0.95, 0.85, 0.15), "stats": {"Can": 80.0,  "Hız": 7.0,  "Hasar": 120.0, "Menzil": 130.0}},
+	{"name": "Medic",    "color": Color(0.85, 0.35, 0.95), "stats": {"Can": 110.0, "Hız": 7.5,  "Hasar": 45.0,  "Menzil": 55.0}},
 ]
+
+const STAT_MAX: Dictionary  = {"Can": 150.0, "Hız": 13.0, "Hasar": 120.0, "Menzil": 130.0}
+const STAT_COLORS: Dictionary = {
+	"Can":    Color(0.9, 0.3,  0.3),
+	"Hız":    Color(0.3, 0.85, 0.3),
+	"Hasar":  Color(0.95, 0.6, 0.1),
+	"Menzil": Color(0.3, 0.6,  1.0),
+}
 
 var _local_selected: String = ""
 var _confirmed: bool = false
@@ -89,7 +97,7 @@ func _build_ui() -> void:
 
 func _build_card(char_data: Dictionary) -> PanelContainer:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(170, 230)
+	panel.custom_minimum_size = Vector2(170, 260)
 
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 8)
@@ -107,13 +115,32 @@ func _build_card(char_data: Dictionary) -> PanelContainer:
 	name_lbl.modulate = char_data["color"]
 	vbox.add_child(name_lbl)
 
-	var desc_lbl := Label.new()
-	desc_lbl.text = char_data["desc"]
-	desc_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	desc_lbl.add_theme_font_size_override("font_size", 12)
-	desc_lbl.modulate = Color(0.72, 0.72, 0.72)
-	desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	vbox.add_child(desc_lbl)
+	var stats_box := VBoxContainer.new()
+	stats_box.add_theme_constant_override("separation", 5)
+	vbox.add_child(stats_box)
+
+	for stat_name: String in ["Can", "Hız", "Hasar", "Menzil"]:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		stats_box.add_child(row)
+
+		var stat_lbl := Label.new()
+		stat_lbl.text = stat_name
+		stat_lbl.add_theme_font_size_override("font_size", 10)
+		stat_lbl.custom_minimum_size = Vector2(46, 0)
+		stat_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		stat_lbl.modulate = STAT_COLORS[stat_name]
+		row.add_child(stat_lbl)
+
+		var bar := ProgressBar.new()
+		bar.min_value = 0.0
+		bar.max_value = 1.0
+		bar.value = (char_data["stats"] as Dictionary)[stat_name] / (STAT_MAX[stat_name] as float)
+		bar.show_percentage = false
+		bar.custom_minimum_size = Vector2(0, 13)
+		bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		bar.modulate = STAT_COLORS[stat_name]
+		row.add_child(bar)
 
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
