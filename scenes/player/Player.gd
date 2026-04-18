@@ -22,8 +22,17 @@ signal ammo_changed(current: int, total: int, reloading: bool)
 const GRAVITY := 9.8
 const SYNC_RATE: float = 0.05
 
+const CHARACTER_STATS: Dictionary = {
+	"Tank":     {"health": 150.0, "speed": 5.5},
+	"Visioner": {"health": 100.0, "speed": 8.0},
+	"Runner":   {"health": 75.0,  "speed": 13.0},
+	"Sniper":   {"health": 80.0,  "speed": 7.0},
+	"Medic":    {"health": 110.0, "speed": 7.5},
+}
+
 var peer_id: int = 0
 var team_id: int = -1
+var character_type: String = "Visioner"
 var health: float = 100.0
 var is_dead: bool = false
 var current_weapon: Node = null
@@ -37,7 +46,12 @@ var _sync_timer: float = 0.0
 var _card_pickup_blocked: float = 0.0
 
 
-func initialize(p_peer_id: int, p_team_id: int) -> void:
+func initialize(p_peer_id: int, p_team_id: int, p_character: String = "Visioner") -> void:
+	character_type = p_character
+	var char_stats: Dictionary = CHARACTER_STATS.get(p_character, CHARACTER_STATS["Visioner"])
+	max_health = char_stats["health"]
+	speed      = char_stats["speed"]
+
 	peer_id = p_peer_id
 	team_id = p_team_id
 	is_local = (p_peer_id == NetworkManager.get_local_id())

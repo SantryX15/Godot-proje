@@ -10,11 +10,12 @@ signal card_picked_up(carrier_peer_id: int, carrier_pos: Vector3, carrier_team_i
 signal card_dropped(drop_pos: Vector3, carrier_team_id: int)
 signal kill_happened(killer_peer_id: int, victim_peer_id: int)
 
-enum State { MENU, LOBBY, IN_GAME, ENDED }
+enum State { MENU, LOBBY, CHARACTER_SELECT, IN_GAME, ENDED }
 
 var state: State = State.MENU
 var player_scene: PackedScene = null
 var map_scene: PackedScene = null
+var char_select_scene: PackedScene = null
 var card_scene: PackedScene = null
 var door_scene: PackedScene = null
 
@@ -35,10 +36,11 @@ var _pending_door_pos: Vector3 = Vector3.ZERO
 
 
 func _ready() -> void:
-	player_scene = preload("res://scenes/player/Player.tscn")
-	map_scene = preload("res://scenes/world/Map.tscn")
-	card_scene = preload("res://scenes/world/Card.tscn")
-	door_scene = preload("res://scenes/world/Door.tscn")
+	player_scene      = preload("res://scenes/player/Player.tscn")
+	map_scene         = preload("res://scenes/world/Map.tscn")
+	char_select_scene = preload("res://scenes/ui/CharacterSelect.tscn")
+	card_scene        = preload("res://scenes/world/Card.tscn")
+	door_scene        = preload("res://scenes/world/Door.tscn")
 	TeamManager.team_won.connect(_on_team_won)
 
 
@@ -55,11 +57,31 @@ func start_game() -> void:
 
 @rpc("authority", "call_local", "reliable")
 func _start_game_rpc() -> void:
-	state = State.IN_GAME
+	state = State.CHARACTER_SELECT
 	card_carrier_peer_id = -1
 	card_instance = null
 	door_instance = null
 	player_stats.clear()
+	get_tree().change_scene_to_packed(char_select_scene)
+
+
+## Tüm oyuncular karakter seçimini tamamladığında host tarafından çağrılır
+func check_all_characters_selected() -> void:
+	if not NetworkManager.is_host():
+		return
+	if state != State.CHARACTER_SELECT:
+		return
+	for p: Dictionary in NetworkManager.players.values():
+		if p.get("team_id", -1) < 0:
+			continue  # takım seçmemiş (spectator)
+		if (p.get("character", "") as String).is_empty():
+			return
+	_begin_actual_game_rpc.rpc()
+
+
+@rpc("authority", "call_local", "reliable")
+func _begin_actual_game_rpc() -> void:
+	state = State.IN_GAME
 	get_tree().change_scene_to_packed(map_scene)
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -79,8 +101,9 @@ func _spawn_local_player() -> void:
 	player.name = "Player_%d" % local_id
 	player.set_multiplayer_authority(local_id)
 	get_tree().current_scene.add_child(player)
+	var character: String = player_data.get("character", "Visioner")
 	player.global_position = spawn_pos
-	player.initialize(local_id, team_id)
+	player.initialize(local_id, team_id, character)
 
 	active_players[local_id] = player
 	emit_signal("local_player_spawned", player)
@@ -99,9 +122,10 @@ func _notify_player_spawned(peer_id: int, team_id: int, pos: Vector3) -> void:
 	var player: CharacterBody3D = player_scene.instantiate()
 	player.name = "Player_%d" % peer_id
 	player.set_multiplayer_authority(peer_id)
+	var character: String = NetworkManager.players.get(peer_id, {}).get("character", "Visioner")
 	get_tree().current_scene.add_child(player)
 	player.global_position = pos
-	player.initialize(peer_id, team_id)
+	player.initialize(peer_id, team_id, character)
 	active_players[peer_id] = player
 
 

@@ -316,6 +316,36 @@ func _are_teams_balanced() -> bool:
 	return true
 
 
+# ─────────────────────────────────────────────
+# Karakter Seçimi
+# ─────────────────────────────────────────────
+
+func request_select_character(char_name: String) -> void:
+	var my_id := get_local_id()
+	if is_host():
+		_apply_character_selection(my_id, char_name)
+	else:
+		_apply_character_selection.rpc_id(1, my_id, char_name)
+
+
+@rpc("any_peer", "reliable")
+func _apply_character_selection(peer_id: int, char_name: String) -> void:
+	if not multiplayer.is_server():
+		return
+	if not players.has(peer_id):
+		return
+	# Aynı takımda bu karakter alınmış mı kontrol et
+	var my_team: int = players[peer_id].get("team_id", -1)
+	for other_id: int in players:
+		if other_id == peer_id:
+			continue
+		var other: Dictionary = players[other_id]
+		if other.get("team_id", -1) == my_team and other.get("character", "") == char_name:
+			return  # Takım arkadaşı zaten almış
+	players[peer_id]["character"] = char_name
+	_broadcast_player_list()
+	emit_signal("player_list_updated")
+	GameManager.check_all_characters_selected()
 
 
 # ─────────────────────────────────────────────

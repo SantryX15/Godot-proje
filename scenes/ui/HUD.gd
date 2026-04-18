@@ -118,6 +118,7 @@ func _on_leave_pressed() -> void:
 func _on_local_player_spawned(player: Node) -> void:
 	player.health_changed.connect(_on_health_changed)
 	player.ammo_changed.connect(_on_ammo_changed)
+	_health_bar.max_value = player.max_health
 	_on_health_changed(player.health)
 
 
@@ -125,7 +126,7 @@ func _on_health_changed(new_health: float) -> void:
 	_health_bar.value = new_health
 	_health_value_label.text = "%d" % int(new_health)
 	# Cana göre renk: yeşil → sarı → kırmızı
-	var t := new_health / 100.0
+	var t := new_health / maxf(_health_bar.max_value, 1.0)
 	if t > 0.5:
 		_health_bar.modulate = Color(1.0 - (t - 0.5) * 2.0, 1.0, 0.0)
 	else:
