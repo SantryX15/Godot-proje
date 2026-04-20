@@ -110,9 +110,9 @@ func _on_peer_disconnected(id: int) -> void:
 	emit_signal("player_list_updated")
 	if multiplayer.is_server():
 		_broadcast_player_list()
-		# Oyun sırasında ayrılan oyuncunun node'unu temizle
-		if GameManager.state == GameManager.State.IN_GAME:
-			GameManager.on_player_disconnected(id)
+	# Oyun sırasında ayrılan oyuncunun node'unu temizle (host + client)
+	if GameManager.state == GameManager.State.IN_GAME:
+		GameManager.on_player_disconnected(id)
 
 
 func _on_connected_to_server() -> void:
