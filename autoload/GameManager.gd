@@ -287,7 +287,7 @@ func _announce_kill_rpc(killer_peer_id: int, victim_peer_id: int) -> void:
 func _schedule_respawn(dead_peer_id: int) -> void:
 	await get_tree().create_timer(3.0).timeout
 	var player: Node = active_players.get(dead_peer_id)
-	if player == null:
+	if not is_instance_valid(player):
 		return
 	var player_data: Dictionary = NetworkManager.players.get(dead_peer_id, {})
 	var team_id: int = player_data.get("team_id", 0)
