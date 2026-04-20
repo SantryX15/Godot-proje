@@ -397,6 +397,9 @@ func restore_from_migration(mig: Dictionary) -> void:
 		# Kart ve kapıyı kaydedilen pozisyona spawn et
 		_spawn_objects_rpc.rpc(_pending_card_pos, _pending_door_pos)
 	emit_signal("game_started")
+	# Migration sonrası tek takım kaldıysa kazandı ilan et
+	await get_tree().process_frame
+	_check_last_team_standing()
 
 
 func return_to_menu() -> void:
