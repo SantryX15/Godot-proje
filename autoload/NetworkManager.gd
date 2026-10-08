@@ -46,6 +46,8 @@ func create_server(player_name: String, p_room_name: String = "", p_password: St
 	multiplayer.multiplayer_peer = peer
 	_local_id_cache = 1  # Host her zaman 1
 	_connect_multiplayer_signals()
+	# Eski (migration öncesi) oyuncu listesini temizle — kalıntı kayıt kalmasın
+	players.clear()
 	# Host kendini ekle
 	players[1] = { "name": local_player_name, "team_id": -1, "is_ready": false }
 	RoomManager.create_room(p_room_name, p_password)

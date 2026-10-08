@@ -1,4 +1,4 @@
-[gd_scene load_steps=3 format=3 uid="uid://4any3bms6nmr"]
+[gd_scene format=3 uid="uid://4any3bms6nmr"]
 
 [ext_resource type="Script" uid="uid://c77ypgatj76cv" path="res://scenes/player/Player.gd" id="1_player"]
 [ext_resource type="PackedScene" uid="uid://c0gcbk3wu3tsi" path="res://anims/Breathing Idle.fbx" id="2_charfbx"]
@@ -9,7 +9,8 @@ size = Vector3(0.8, 1.8, 0.8)
 [node name="Player" type="CharacterBody3D" unique_id=588909632]
 script = ExtResource("1_player")
 
-[node name="CharacterMesh" parent="." instance=ExtResource("2_charfbx")]
+[node name="CharacterMesh" parent="." unique_id=1921381750 instance=ExtResource("2_charfbx")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=2040562293]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
@@ -24,6 +25,9 @@ spot_range = 26.0
 [node name="BodyLight" type="OmniLight3D" parent="." unique_id=1098730031]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
 light_energy = 2.0
+light_cull_mask = 524288
+shadow_enabled = false
+omni_range = 2.5
 
 [node name="WeaponHolder" type="Node3D" parent="." unique_id=1414605041]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)

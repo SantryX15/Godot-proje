@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(where godot:*)",
-      "Bash(where godot4:*)"
+      "Bash(where godot4:*)",
+      "Bash(find 'D:/Godot proje/.godot/imported' -name *Idle* -o -name *idle* -o -name *Breathing*)",
+      "Bash(find 'D:/Godot proje/.godot' -name *.uid)",
+      "Bash(ls -lt D:Godot proje/*.png)"
     ]
   }
 }

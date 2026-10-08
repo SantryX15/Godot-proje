@@ -20,6 +20,8 @@ signal ammo_changed(current: int, total: int, reloading: bool)
 
 const GRAVITY := 9.8
 const SYNC_RATE: float = 0.05
+const BODY_LIGHT_LAYER_BIT: int = 20  # BodyLight'ın sadece karakter mesh'ine değmesi için özel render layer
+const SELF_RIM_SHADER: Shader = preload("res://scenes/player/SelfVisibility.gdshader")
 
 const CHARACTER_STATS: Dictionary = {
 	"Tank":     {"health": 150.0, "speed": 5.5},
@@ -71,6 +73,13 @@ func initialize(p_peer_id: int, p_team_id: int, p_character: String = "Visioner"
 	if _char_mesh:
 		_anim_player = _find_anim_player(_char_mesh)
 		_play_idle()
+		# BodyLight sadece karakter mesh'ine değsin (zemine/duvara ışık/gölge taşmasın)
+		_add_render_layer(_char_mesh, BODY_LIGHT_LAYER_BIT)
+		# Flashlight kendi gövdesinden devasa gölge atmasın
+		_disable_shadow_casting(_char_mesh)
+		# Kendi karakterini karanlıkta görünür kılan kenar parıltısı — sadece yerel oyuncuda
+		if is_local:
+			_apply_self_rim(_char_mesh)
 
 	# Tüm billboard label'lar gizlendi — bilgiler ekran HUD'ında gösterilir
 	health_label.visible  = false
@@ -92,6 +101,33 @@ func initialize(p_peer_id: int, p_team_id: int, p_character: String = "Visioner"
 	reset_physics_interpolation()
 
 	_equip_default_weapon()
+
+
+func _add_render_layer(node: Node, layer_bit: int) -> void:
+	if node is VisualInstance3D:
+		(node as VisualInstance3D).set_layer_mask_value(layer_bit, true)
+	for child in node.get_children():
+		_add_render_layer(child, layer_bit)
+
+
+func _apply_self_rim(node: Node) -> void:
+	# material_overlay: mevcut malzemeyi bozmadan üstüne unshaded bir kenar parıltısı pass'i ekler.
+	# Gerçek ışık değildir, sadece bu client'ta render edilir — zemine/duvara etkisi yok,
+	# diğer oyuncular (kendi sahnelerini kendileri render ettiği için) bunu hiç görmez.
+	if node is GeometryInstance3D:
+		var mat := ShaderMaterial.new()
+		mat.shader = SELF_RIM_SHADER
+		(node as GeometryInstance3D).material_overlay = mat
+	for child in node.get_children():
+		_apply_self_rim(child)
+
+
+func _disable_shadow_casting(node: Node) -> void:
+	# El feneri kendi gövdesinden/silahtan devasa gölge atmasın
+	if node is GeometryInstance3D:
+		(node as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for child in node.get_children():
+		_disable_shadow_casting(child)
 
 
 func _find_anim_player(node: Node) -> AnimationPlayer:
@@ -150,6 +186,8 @@ func _equip_default_weapon() -> void:
 			func(cur: int, tot: int, rel: bool): emit_signal("ammo_changed", cur, tot, rel)
 		)
 	current_weapon.configure(WEAPON_CONFIGS.get(character_type, WEAPON_CONFIGS["Visioner"]))
+	_add_render_layer(current_weapon, BODY_LIGHT_LAYER_BIT)
+	_disable_shadow_casting(current_weapon)
 
 
 # ─────────────────────────────────────────────
@@ -187,15 +225,11 @@ func _handle_local_input(delta: float) -> void:
 
 	move_and_slide()
 
-	# Mouse hedefine bak
+	# Mouse hedefine bak — gövde, silah ve el feneri birlikte döner (asker gibi hedefe yönelme)
 	var aim := _get_aim_target()
-	var flat_aim := Vector3(aim.x, weapon_holder.global_position.y, aim.z)
-	if flat_aim.distance_to(weapon_holder.global_position) > 0.1:
-		weapon_holder.look_at(flat_aim, Vector3.UP)
-
-	var flat_flash := Vector3(aim.x, flashlight.global_position.y, aim.z)
-	if flat_flash.distance_to(flashlight.global_position) > 0.1:
-		flashlight.look_at(flat_flash, Vector3.UP)
+	var flat_aim := Vector3(aim.x, global_position.y, aim.z)
+	if flat_aim.distance_to(global_position) > 0.1:
+		look_at(flat_aim, Vector3.UP)
 
 	# Ateş et (semi-auto: sadece tıklama anında; otomatik: basılı tutunca)
 	var shoot_pressed: bool
@@ -214,7 +248,7 @@ func _handle_local_input(delta: float) -> void:
 	if _sync_timer >= SYNC_RATE:
 		_sync_timer = 0.0
 		if multiplayer.has_multiplayer_peer() and multiplayer.get_peers().size() > 0:
-			_broadcast_state.rpc(global_position, weapon_holder.rotation.y)
+			_broadcast_state.rpc(global_position, rotation.y)
 
 
 func _get_aim_target() -> Vector3:
@@ -233,8 +267,7 @@ func _get_aim_target() -> Vector3:
 func _interpolate_remote(delta: float) -> void:
 	var t := minf(delta * 20.0, 1.0)
 	global_position = global_position.lerp(_target_position, t)
-	weapon_holder.rotation.y = lerp_angle(weapon_holder.rotation.y, _target_aim_y, t)
-	flashlight.rotation.y    = lerp_angle(flashlight.rotation.y,    _target_aim_y, t)
+	rotation.y = lerp_angle(rotation.y, _target_aim_y, t)
 
 
 @rpc("any_peer", "unreliable_ordered")

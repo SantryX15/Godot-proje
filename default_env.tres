@@ -2,5 +2,6 @@
 
 [resource]
 background_mode = 1
+background_color = Color(0.033818822, 0.033818822, 0.033818826, 1)
 ambient_light_source = 2
 ambient_light_color = Color(0.07, 0.07, 0.1, 1)

@@ -176,7 +176,7 @@ func _build_card(char_data: Dictionary) -> PanelContainer:
 
 	# Karakterin rengiyle boyalı ana ışık
 	var key_light := OmniLight3D.new()
-	key_light.position    = Vector3(1.5, 3.0, 2.0)
+	key_light.position    = Vector3(1.5, 3.0, -2.0)
 	key_light.light_color  = char_data["color"]
 	key_light.light_energy = 2.5
 	key_light.omni_range   = 9.0
@@ -184,15 +184,15 @@ func _build_card(char_data: Dictionary) -> PanelContainer:
 
 	# Dolgu ışığı (nötr beyaz)
 	var fill_light := OmniLight3D.new()
-	fill_light.position    = Vector3(-1.2, 2.0, 1.5)
+	fill_light.position    = Vector3(-1.2, 2.0, -1.5)
 	fill_light.light_energy = 1.0
 	fill_light.omni_range   = 7.0
 	world.add_child(fill_light)
 
-	# Kamera — karakterin üst gövdesini gösterir
+	# Kamera — karakterin üst gövdesini gösterir (CharacterMesh -Z yönüne bakar, kamera karşısında olmalı)
 	var cam := Camera3D.new()
-	cam.position         = Vector3(0.0, 1.3, 2.5)
-	cam.rotation_degrees = Vector3(-8.0, 0.0, 0.0)
+	cam.position         = Vector3(0.0, 1.3, -2.5)
+	cam.rotation_degrees = Vector3(-8.0, 180.0, 0.0)
 	world.add_child(cam)
 
 	# ── İsim + Stat barları (kenarlara margin ile) ──
