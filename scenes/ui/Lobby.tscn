@@ -1,75 +1,12 @@
-[gd_scene load_steps=2 format=3 uid="uid://lobby001"]
+[gd_scene format=3 uid="uid://lobby001"]
 
 [ext_resource type="Script" path="res://scenes/ui/Lobby.gd" id="1_lobby"]
 
 [node name="Lobby" type="Control"]
 layout_mode = 3
 anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 script = ExtResource("1_lobby")
-
-[node name="Background" type="ColorRect" parent="."]
-layout_mode = 1
-anchors_preset = 15
-color = Color(0.07, 0.07, 0.12, 1)
-
-[node name="Margin" type="MarginContainer" parent="."]
-layout_mode = 1
-anchors_preset = 15
-theme_override_constants/margin_left = 20
-theme_override_constants/margin_top = 16
-theme_override_constants/margin_right = 20
-theme_override_constants/margin_bottom = 16
-
-[node name="VBox" type="VBoxContainer" parent="Margin"]
-layout_mode = 2
-theme_override_constants/separation = 14
-
-[node name="Title" type="Label" parent="Margin/VBox"]
-layout_mode = 2
-text = "Lobi"
-theme_override_font_sizes/font_size = 17
-
-[node name="TeamContainer" type="HBoxContainer" parent="Margin/VBox"]
-layout_mode = 2
-size_flags_vertical = 3
-theme_override_constants/separation = 12
-
-[node name="SpectatorSection" type="VBoxContainer" parent="Margin/VBox"]
-layout_mode = 2
-theme_override_constants/separation = 4
-
-[node name="SpectatorLabel" type="Label" parent="Margin/VBox/SpectatorSection"]
-layout_mode = 2
-text = "Takım Seçmeyenler"
-theme_override_font_sizes/font_size = 12
-modulate = Color(0.6, 0.6, 0.6, 1)
-
-[node name="SpectatorList" type="HBoxContainer" parent="Margin/VBox/SpectatorSection"]
-layout_mode = 2
-theme_override_constants/separation = 16
-
-[node name="BottomBar" type="HBoxContainer" parent="Margin/VBox"]
-layout_mode = 2
-theme_override_constants/separation = 12
-
-[node name="ReadyBtn" type="Button" parent="Margin/VBox/BottomBar"]
-custom_minimum_size = Vector2(140, 44)
-text = "Hazır"
-
-[node name="StartBtn" type="Button" parent="Margin/VBox/BottomBar"]
-custom_minimum_size = Vector2(180, 44)
-text = "Oyunu Başlat"
-visible = false
-
-[node name="StatusLabel" type="Label" parent="Margin/VBox/BottomBar"]
-layout_mode = 2
-size_flags_horizontal = 3
-text = ""
-
-[node name="BackBtn" type="Button" parent="Margin/VBox/BottomBar"]
-custom_minimum_size = Vector2(100, 44)
-text = "Geri"
-
-[connection signal="pressed" from="Margin/VBox/BottomBar/ReadyBtn" to="." method="_on_ready_btn_pressed"]
-[connection signal="pressed" from="Margin/VBox/BottomBar/StartBtn" to="." method="_on_start_btn_pressed"]
-[connection signal="pressed" from="Margin/VBox/BottomBar/BackBtn" to="." method="_on_back_pressed"]

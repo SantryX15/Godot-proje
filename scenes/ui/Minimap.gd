@@ -15,6 +15,8 @@ var _alert_timer: float = 0.0
 var _alert_pos: Vector3 = Vector3.ZERO
 var _alert_color: Color = Color.RED
 
+var _bg_style: StyleBoxFlat = UITheme.style(Color(UITheme.BG, 0.82), 12, UITheme.BORDER, 1)
+
 
 func _ready() -> void:
 	custom_minimum_size = Vector2(SIZE, SIZE)
@@ -28,9 +30,14 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
-	# ── Arka plan ──
-	draw_rect(Rect2(Vector2.ZERO, Vector2(SIZE, SIZE)), Color(0.0, 0.0, 0.0, 0.65))
-	draw_rect(Rect2(Vector2.ZERO, Vector2(SIZE, SIZE)), Color(1.0, 1.0, 1.0, 0.25), false, 1.5)
+	# ── Arka plan: UITheme paletiyle yuvarlak panel + taktik ızgara ──
+	var rect := Rect2(Vector2.ZERO, Vector2(SIZE, SIZE))
+	draw_style_box(_bg_style, rect)
+	var step := SIZE / 6.0
+	for i in range(1, 6):
+		var o := step * i
+		draw_line(Vector2(o, 6), Vector2(o, SIZE - 6), Color(1, 1, 1, 0.04), 1.0)
+		draw_line(Vector2(6, o), Vector2(SIZE - 6, o), Color(1, 1, 1, 0.04), 1.0)
 
 	if not multiplayer.has_multiplayer_peer():
 		return
@@ -59,7 +66,14 @@ func _draw() -> void:
 		var color := TeamManager.get_color(team_id)
 		var radius := 5.0 if is_self else 3.5
 
-		draw_circle(p, radius + 1.5, Color.WHITE)
+		# Kendi el feneri konisi (Player root -Z yönüne bakar)
+		if is_self:
+			var fwd3: Vector3 = -(player as Node3D).global_transform.basis.z
+			var fwd := Vector2(fwd3.x, fwd3.z).normalized()
+			var cone := PackedVector2Array([p, p + fwd.rotated(-0.45) * 26.0, p + fwd.rotated(0.45) * 26.0])
+			draw_colored_polygon(cone, Color(UITheme.ACCENT, 0.22))
+
+		draw_circle(p, radius + 1.5, Color(0.05, 0.05, 0.08))
 		draw_circle(p, radius, color)
 
 		# Kart taşıyorsa sarı halka
@@ -79,7 +93,8 @@ func _draw() -> void:
 ## 3D dünya konumunu (X/Z) minimap koordinatına çevirir
 func _w2m(world_pos: Vector3) -> Vector2:
 	var t := (Vector2(world_pos.x, world_pos.z) - MAP_MIN) / (MAP_MAX - MAP_MIN)
-	return t * Vector2(SIZE, SIZE)
+	# Harita dışına taşan noktalar panelin kenarında kalsın
+	return (t * Vector2(SIZE, SIZE)).clamp(Vector2(6, 6), Vector2(SIZE - 6, SIZE - 6))
 
 
 func _on_card_picked_up(carrier_peer_id: int, carrier_pos: Vector3, carrier_team_id: int) -> void:

@@ -10,6 +10,11 @@ auto-memory dosyalarına bak (özellikle `player_lighting.md`, `host_migration.m
 ## Autoload sırası (project.godot) — bozulursa parse hatası
 `GameManager` → `TeamManager` → `RoomManager` → `NetworkManager` (RoomManager, NetworkManager'dan ÖNCE)
 
+`scenes/ui/UITheme.gd` (**class_name, statik — autoload DEĞİL**): `UITheme.apply(get_tree())` (Main.gd + MainMenu._ready)
+kodla Theme kurup `root.theme`'e atar (sahne geçişlerinde korunur, tüm sahneler etkilenir). Palet sabitleri
+(`ACCENT` el feneri sarısı, `SURFACE*`, `TEXT_DIM`...), `style()`/`label()` helper'ları, fontlar (`font_bold/title/caps`).
+Tip varyasyonları: Button → `PrimaryButton`/`GhostButton`/`TabButton`, Label → `TitleLabel`/`CapsLabel`/`DimLabel`.
+
 ---
 
 ## autoload/NetworkManager.gd — ağ/lobi/oyuncu kaydı, host migration
@@ -153,17 +158,24 @@ CharacterMesh hepsi child olarak BİRLİKTE döner — ayrı ayrı döndürülm�
 
 ## scenes/ui/ — menü/lobi/karakter seçimi/HUD
 
-- **MainMenu.gd**: 3 ekran (main/create/browse) + JoinCodePanel modal. `NetworkManager.create_server/join_server`
-  çağırır, `server_created`/`joined_server`/`kicked` sinyallerini dinler.
-- **Lobby.gd**: `_setup_team_panels()` kodla 4 panel oluşturur (tıklanabilir → `request_change_team`).
-  `_refresh_player_list()` → `NetworkManager.player_list_updated` sinyaline bağlı, spectator (team_id<0) ayrı listelenir.
-  Start butonu: `_are_teams_balanced()` + herkes ready ise aktif.
+- **MainMenu.gd**: UI tamamen kodla (tscn sadece kök). Sol: logo + operatör adı (`user://settings.cfg`'ye kaydedilir).
+  Sağ: sekmeler `browse`/`create`/`code` (`_show_tab`; `RoomManager.start_listening` SADECE browse'da açık) + şifreli oda modalı.
+  Arka plan `MenuBackdrop.gdshader` (fareyi takip eden el feneri + ızgara). `NetworkManager.create_server/join_server`
+  çağırır, `server_created`/`joined_server`/`connection_failed`/`kicked` sinyallerini dinler.
+- **Lobby.gd**: UI tamamen kodla (tscn sadece kök), UITheme paleti + MenuBackdrop (ışık rengi kendi takımına döner).
+  Üst: oda adı, oyuncu sayısı, oda kodu + Kopyala (`DisplayServer.clipboard_set`). 4 takım kartı × `TEAM_SIZE=5` slot
+  (tıklanabilir → `request_change_team`; dolu/kendi takımı client tarafında engelli — host'ta takım limiti YOK).
+  `_refresh_player_list()` → `player_list_updated`'e bağlı, takım seçmeyenler (team_id<0) alt şeritte.
+  Hazır durumu local değişken değil `players[local]["is_ready"]`'den okunur. Start: `_are_teams_balanced()` + herkes ready.
 - **CharacterSelect.gd**: 5 karakter kartı, her biri SubViewport içinde Player.tscn önizlemesi
   (`set_script(null)` ile kodsuz, sadece görsel; kamera/ışık CharacterMesh'in 180° çevrili yönüne göre ayarlı).
   Seçim → `NetworkManager.request_select_character()`.
-- **HUD.gd**: Kill feed (sağ üst), Minimap (sağ alt, `Minimap.gd` script atanır), kart banner (üst merkez),
-  skor paneli (sol üst), HP/ammo (sol alt), TAB scoreboard (`_refresh_scoreboard`, takım bazlı kill/death grid),
-  ESC pause menü. `GameManager.game_ended` → `end_panel.show()`. "Ana Menüye Dön" → `GameManager.return_to_menu()`.
+- **HUD.gd**: UI tamamen kodla (tscn sadece CanvasLayer), UITheme paleti, tüm katmanlar `_root` (mouse IGNORE) altında.
+  Skor (sol üst, kendi takımı vurgulu), hedef çipi + uyarı bandı (üst orta; `_carrier_peer` card_picked_up/dropped ile
+  güncellenir), kill feed (sağ üst), oyuncu kartı (sol alt: karakter, can, mermi; şarjör ilerlemesi `weapon.reload_time` tween'i),
+  Minimap (sağ alt), düşük can/hasar vinyeti, ölüm ekranı (`_local_player.is_dead` poll + `RESPAWN_TIME=3` geri sayım),
+  TAB scoreboard, ESC pause, oyun sonu (`_end_overlay`, ZAFER/YENİLGİ). "Ana Menüye Dön" → `GameManager.return_to_menu()`.
+  Oyun mantığına dokunmaz — sadece sinyal dinler.
 
 ---
 

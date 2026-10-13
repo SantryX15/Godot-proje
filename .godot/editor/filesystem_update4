@@ -1,5 +1,10 @@
+res://scenes/ui/CharacterSelect.gd
 res://default_env.tres
 res://scenes/player/Player.gd
-res://scenes/player/Player.tscn
-res://scenes/ui/CharacterSelect.gd
+res://scenes/ui/MainMenu.gd
+res://scenes/main/Main.gd
+res://scenes/ui/Lobby.gd
 res://autoload/NetworkManager.gd
+res://scenes/ui/HUD.gd
+res://scenes/ui/HUD.tscn
+res://scenes/ui/Minimap.gd

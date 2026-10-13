@@ -58,6 +58,10 @@ func create_server(player_name: String, p_room_name: String = "", p_password: St
 func join_server(address: String, player_name: String, p_password: String = "") -> void:
 	local_player_name  = player_name
 	_pending_password  = p_password
+	# Geçersiz adresle create_client ENet'te C++ hatası üretir — önceden yakala
+	if not is_valid_address(address):
+		emit_signal("connection_failed")
+		return
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_client(address, PORT)
 	if err != OK:
@@ -66,6 +70,12 @@ func join_server(address: String, player_name: String, p_password: String = "") 
 		return
 	multiplayer.multiplayer_peer = peer
 	_connect_multiplayer_signals()
+
+
+## IPv4/IPv6 adresi veya "localhost" mu? (DNS adı desteklenmiyor — LAN oyunu)
+static func is_valid_address(address: String) -> bool:
+	var a := address.strip_edges()
+	return a.to_lower() == "localhost" or a.is_valid_ip_address()
 
 
 func disconnect_all() -> void:
