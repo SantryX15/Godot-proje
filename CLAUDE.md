@@ -34,6 +34,9 @@ Tip varyasyonları: Button → `PrimaryButton`/`GhostButton`/`TabButton`, Label 
 | `set_ready(bool)` / `_set_ready_rpc` | Lobby "Hazır" butonu | ready flag, broadcast |
 | `_are_teams_balanced()` | Lobby, start butonu guard | en az 2 takımda eşit sayı |
 | `request_select_character(name)` / `_apply_character_selection` | CharacterSelect | takım-içi benzersizlik kontrolü, `GameManager.check_all_characters_selected()` çağırır |
+| `send_chat(text, channel)` → `_chat_request` (any_peer) | ChatBox | host: gönderen = `get_remote_sender_id()` (0→1), flood koruması `CHAT_MIN_INTERVAL_MS`, `CHAT_MAX_LEN` kırpma, `"team"` ise sadece aynı takıma `_chat_receive` |
+| `_chat_system(text)` (host) | `register_player` ("katıldı"), `_on_peer_disconnected` ("ayrıldı") | `channel="system"` herkese |
+| `_chat_receive(msg)` (authority) | host → peer'lar | `chat_history`'ye ekler (max 60, sahne geçişinde korunur, `disconnect_all` temizler), `chat_received` sinyali |
 
 ### Host migration akışı (`_on_server_disconnected`)
 1. `_saved_team_id` + `_migration_players` + `GameManager.get_migration_state()` snapshot alınır.
@@ -44,7 +47,7 @@ Tip varyasyonları: Button → `PrimaryButton`/`GhostButton`/`TabButton`, Label 
 5. Kimse kalmadıysa → direkt Main.tscn.
 
 **Sinyaller:** `server_created`, `joined_server`, `connection_failed`, `player_connected/disconnected`,
-`player_list_updated`, `kicked(reason)`, `host_migrated`.
+`player_list_updated`, `kicked(reason)`, `host_migrated`, `chat_received(msg)`.
 
 ---
 
@@ -167,6 +170,14 @@ CharacterMesh hepsi child olarak BİRLİKTE döner — ayrı ayrı döndürülm�
   (tıklanabilir → `request_change_team`; dolu/kendi takımı client tarafında engelli — host'ta takım limiti YOK).
   `_refresh_player_list()` → `player_list_updated`'e bağlı, takım seçmeyenler (team_id<0) alt şeritte.
   Hazır durumu local değişken değil `players[local]["is_ready"]`'den okunur. Start: `_are_teams_balanced()` + herkes ready.
+- **Crosshair.gd** (HUD `_root`'a ekler): fare yerine nişangah, açıkken `MOUSE_MODE_HIDDEN` (`_exit_tree` geri açar).
+  Boşluk = oyuncuya ekran mesafesi × tan(`weapon.spread_degrees`), atışta tepme, şarjör halkası (`reload_time`).
+  Gizli: ölü / sohbete yazarken / `allowed=false` (HUD: pause/oyun sonu).
+- **ChatBox.gd** (class_name, PanelContainer): `mode` LOBBY (hep açık, `chat_history` gösterir) / GAME (lobi geçmişi
+  YOK, sadece maç içi mesajlar `_game_lines`; kapalıyken her mesaj `SHOW_TIME=4.5`s görünür + `FADE_TIME` söner).
+  Enter aç/gönder, Tab kanal (HERKES/TAKIM), Esc kapat, T (GAME) takım kanalıyla aç, `/t` `/a` önekleri.
+  `_input()` ile tuşları GUI'den önce yakalar. **`static var is_typing`** → Player.gd hareket/ateş/reload'u, HUD TAB'ı kilitler.
+  Oyuncu metni BBCode'a `[`→`[lb]` ile kaçışlanır. Lobby (alt sol) + HUD (oyuncu kartı üstü) kullanır.
 - **CharacterSelect.gd**: 5 karakter kartı, her biri SubViewport içinde Player.tscn önizlemesi
   (`set_script(null)` ile kodsuz, sadece görsel; kamera/ışık CharacterMesh'in 180° çevrili yönüne göre ayarlı).
   Seçim → `NetworkManager.request_select_character()`.

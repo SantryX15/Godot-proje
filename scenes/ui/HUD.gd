@@ -58,6 +58,8 @@ var _end_overlay: Control
 var _end_title: Label
 var _end_sub: Label
 var _end_stats: Label
+var _chat: ChatBox
+var _crosshair: Control
 
 
 func _ready() -> void:
@@ -79,9 +81,12 @@ func _ready() -> void:
 	_setup_objective()
 	_setup_kill_feed()
 	_setup_player_card()
+	_setup_chat()
 	_setup_minimap()
 	_setup_death_overlay()
 	_setup_scoreboard()
+	_crosshair = preload("res://scenes/ui/Crosshair.gd").new()
+	_root.add_child(_crosshair)  # menülerin altında kalsın — menü açıkken zaten gizlenir
 	_setup_pause_menu()
 	_setup_end_overlay()
 
@@ -91,8 +96,13 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	# TAB skor tablosu
-	var tab := Input.is_key_pressed(KEY_TAB) and not _pause_panel.visible and not _end_overlay.visible
+	# Menü/oyun sonu açıkken sohbet Enter ile açılmasın
+	_chat.enabled = not _pause_panel.visible and not _end_overlay.visible
+	_crosshair.allowed = _chat.enabled
+
+	# TAB skor tablosu (sohbete yazarken TAB kanal değiştirir)
+	var tab := Input.is_key_pressed(KEY_TAB) and not ChatBox.is_typing \
+		and not _pause_panel.visible and not _end_overlay.visible
 	if tab != _scoreboard_visible:
 		_scoreboard_visible = tab
 		_scoreboard_panel.visible = tab
@@ -311,6 +321,20 @@ func _setup_player_card() -> void:
 	ammo_box.add_child(_ammo_bar)
 
 	_ignore_mouse_recursive(card)
+
+
+func _setup_chat() -> void:
+	# Oyuncu kartının üstünde; kapalıyken sadece son mesajlar görünür ve solar (Enter / T ile açılır)
+	_chat = ChatBox.new()
+	_chat.mode = ChatBox.Mode.GAME
+	_chat.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	_chat.offset_left = 16
+	_chat.offset_right = 416
+	_chat.offset_top = -360
+	_chat.offset_bottom = -150
+	_chat.grow_vertical = Control.GROW_DIRECTION_BEGIN  # içerik büyürse yukarı uzasın, oyuncu kartına binmesin
+	_chat.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(_chat)
 
 
 func _setup_minimap() -> void:

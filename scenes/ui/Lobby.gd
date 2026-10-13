@@ -82,8 +82,25 @@ func _build_ui() -> void:
 	for i in range(4):
 		team_row.add_child(_build_team_card(i))
 
-	root.add_child(_build_unassigned_strip())
-	root.add_child(_build_bottom_bar())
+	# Alt bölüm: solda sohbet, sağda takım seçmeyenler + hazır/başlat
+	var bottom := HBoxContainer.new()
+	bottom.add_theme_constant_override("separation", 14)
+	root.add_child(bottom)
+
+	var chat := ChatBox.new()
+	chat.mode = ChatBox.Mode.LOBBY
+	chat.custom_minimum_size = Vector2(460, 170)
+	bottom.add_child(chat)
+
+	var right := VBoxContainer.new()
+	right.add_theme_constant_override("separation", 10)
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bottom.add_child(right)
+	var fill := Control.new()
+	fill.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right.add_child(fill)
+	right.add_child(_build_unassigned_strip())
+	right.add_child(_build_bottom_bar())
 
 
 func _build_header() -> Control:
@@ -237,7 +254,7 @@ func _build_bottom_bar() -> Control:
 	row.add_child(_host_hint)
 
 	_ready_btn = Button.new()
-	_ready_btn.custom_minimum_size = Vector2(190, 48)
+	_ready_btn.custom_minimum_size = Vector2(160, 46)
 	_ready_btn.focus_mode = Control.FOCUS_NONE
 	_ready_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	_ready_btn.add_theme_font_size_override("font_size", 15)
@@ -247,7 +264,7 @@ func _build_bottom_bar() -> Control:
 	_start_btn = Button.new()
 	_start_btn.text = "OYUNU BAŞLAT  ▶"
 	_start_btn.theme_type_variation = "PrimaryButton"
-	_start_btn.custom_minimum_size = Vector2(210, 48)
+	_start_btn.custom_minimum_size = Vector2(180, 46)
 	_start_btn.focus_mode = Control.FOCUS_NONE
 	_start_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	_start_btn.add_theme_font_size_override("font_size", 15)
@@ -265,7 +282,7 @@ func _build_player_slot(peer_id: int, data: Dictionary, team_color: Color, is_me
 	var ready_flag: bool = data.get("is_ready", false)
 
 	var slot := PanelContainer.new()
-	slot.custom_minimum_size = Vector2(0, 42)
+	slot.custom_minimum_size = Vector2(0, 36)
 	var st := UITheme.style(Color(1, 1, 1, 0.04), 8, Color.TRANSPARENT, 0, 8, 6)
 	if is_me:
 		st.bg_color = Color(team_color, 0.14)
@@ -299,7 +316,7 @@ func _build_player_slot(peer_id: int, data: Dictionary, team_color: Color, is_me
 
 func _build_empty_slot() -> Control:
 	var slot := PanelContainer.new()
-	slot.custom_minimum_size = Vector2(0, 42)
+	slot.custom_minimum_size = Vector2(0, 36)
 	slot.add_theme_stylebox_override("panel", UITheme.style(Color.TRANSPARENT, 8, Color(1, 1, 1, 0.06), 1, 12, 6))
 	var lbl := UITheme.label("+   Boş slot", 12, Color(UITheme.TEXT_DIM, 0.55))
 	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -309,9 +326,9 @@ func _build_empty_slot() -> Control:
 
 func _avatar(player_name: String, color: Color) -> Control:
 	var av := PanelContainer.new()
-	av.custom_minimum_size = Vector2(28, 28)
+	av.custom_minimum_size = Vector2(24, 24)
 	av.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	av.add_theme_stylebox_override("panel", UITheme.style(Color(color, 0.85), 14))
+	av.add_theme_stylebox_override("panel", UITheme.style(Color(color, 0.85), 12))
 	var initial := player_name.substr(0, 1).to_upper() if not player_name.is_empty() else "?"
 	var lbl := UITheme.label(initial, 13, Color(0.05, 0.05, 0.08), UITheme.font_bold)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

@@ -11,6 +11,7 @@ signal player_disconnected(peer_id: int)
 signal player_list_updated
 signal kicked(reason: String)
 signal host_migrated  # Yeni host seçildi (lobby durumunda UI güncellemek için)
+signal chat_received(msg: Dictionary)  # {sender, name, team, channel("all"/"team"/"system"), text}
 
 const PORT := 7777
 const MAX_PLAYERS := 20  # 4 takım × 5 oyuncu
@@ -28,6 +29,13 @@ var _is_migrating: bool = false        # Migration sürecinde mi?
 var _pending_migration_state: Dictionary = {}  # Yeni host: bağlanan clientlara gönderilecek
 var _migration_players: Dictionary = {}        # Eski player listesi (peer_id → data)
 var _local_id_cache: int = 0           # get_unique_id() cache'i — peer kapandıktan sonra da kullanılabilir
+
+## Sohbet
+const CHAT_MAX_LEN := 140
+const CHAT_HISTORY_MAX := 60
+const CHAT_MIN_INTERVAL_MS := 350      # host tarafı flood koruması (oyuncu başına)
+var chat_history: Array[Dictionary] = []  # sahne geçişlerinde korunur (lobi → oyun)
+var _chat_last_ms: Dictionary = {}
 
 
 # ─────────────────────────────────────────────
@@ -91,6 +99,8 @@ func disconnect_all() -> void:
 	_local_id_cache   = 0
 	_pending_migration_state = {}
 	_migration_players       = {}
+	chat_history.clear()
+	_chat_last_ms.clear()
 	RoomManager.stop_hosting()
 	RoomManager.stop_listening()
 
@@ -117,11 +127,14 @@ func _on_peer_connected(id: int) -> void:
 
 
 func _on_peer_disconnected(id: int) -> void:
+	var left_name: String = players.get(id, {}).get("name", "")
 	players.erase(id)
 	emit_signal("player_disconnected", id)
 	emit_signal("player_list_updated")
 	if multiplayer.is_server():
 		_broadcast_player_list()
+		if not left_name.is_empty():
+			_chat_system("%s odadan ayrıldı" % left_name)
 	# Oyun sırasında ayrılan oyuncunun node'unu temizle (host + client)
 	if GameManager.state == GameManager.State.IN_GAME:
 		GameManager.on_player_disconnected(id)
@@ -230,6 +243,7 @@ func register_player(peer_id: int, player_name: String, password: String, saved_
 	# Diğer herkese güncel listeyi gönder
 	_broadcast_player_list()
 	emit_signal("player_list_updated")
+	_chat_system("%s odaya katıldı" % player_name)
 
 
 func _broadcast_player_list() -> void:
@@ -358,6 +372,76 @@ func _apply_character_selection(peer_id: int, char_name: String) -> void:
 	_broadcast_player_list()
 	emit_signal("player_list_updated")
 	GameManager.check_all_characters_selected()
+
+
+# ─────────────────────────────────────────────
+# Sohbet — client → host (_chat_request) → host doğrular → ilgili peer'lara (_chat_receive)
+# Gönderen kimliği RPC sender id'den alınır (client sahte isim/takım yollayamaz).
+# ─────────────────────────────────────────────
+
+## channel: "all" (herkes) veya "team" (sadece kendi takımı; takımsızsa "all"a düşer)
+func send_chat(text: String, channel: String = "all") -> void:
+	var clean := text.strip_edges()
+	if clean.is_empty() or not multiplayer.has_multiplayer_peer():
+		return
+	if is_host():
+		_chat_request(clean, channel)
+	else:
+		_chat_request.rpc_id(1, clean, channel)
+
+
+@rpc("any_peer", "reliable")
+func _chat_request(text: String, channel: String) -> void:
+	if not multiplayer.is_server():
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	if sender == 0:
+		sender = 1  # host kendi mesajını doğrudan çağırdı
+	if not players.has(sender):
+		return
+	var now := Time.get_ticks_msec()
+	if now - int(_chat_last_ms.get(sender, -100000)) < CHAT_MIN_INTERVAL_MS:
+		return
+	_chat_last_ms[sender] = now
+
+	var clean := text.strip_edges().substr(0, CHAT_MAX_LEN)
+	if clean.is_empty():
+		return
+	var team: int = players[sender].get("team_id", -1)
+	if channel != "team" or team < 0:
+		channel = "all"
+	var msg := {
+		"sender": sender, "name": players[sender].get("name", "???"),
+		"team": team, "channel": channel, "text": clean,
+	}
+	for pid: int in players:
+		if channel == "team" and players[pid].get("team_id", -1) != team:
+			continue
+		_chat_deliver_to(pid, msg)
+
+
+## Host: herkese sistem mesajı (katıldı/ayrıldı vb.)
+func _chat_system(text: String) -> void:
+	if not multiplayer.is_server():
+		return
+	var msg := {"sender": 0, "name": "", "team": -1, "channel": "system", "text": text}
+	for pid: int in players:
+		_chat_deliver_to(pid, msg)
+
+
+func _chat_deliver_to(pid: int, msg: Dictionary) -> void:
+	if pid == 1:
+		_chat_receive(msg)
+	else:
+		_chat_receive.rpc_id(pid, msg)
+
+
+@rpc("authority", "reliable")
+func _chat_receive(msg: Dictionary) -> void:
+	chat_history.append(msg)
+	if chat_history.size() > CHAT_HISTORY_MAX:
+		chat_history.pop_front()
+	emit_signal("chat_received", msg)
 
 
 # ─────────────────────────────────────────────

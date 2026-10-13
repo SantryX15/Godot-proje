@@ -207,12 +207,16 @@ func _handle_local_input(delta: float) -> void:
 	if _card_pickup_blocked > 0.0:
 		_card_pickup_blocked -= delta
 
+	# Sohbete yazılırken hareket/ateş/şarjör tuşları devre dışı (nişan + senkron devam eder)
+	var typing := ChatBox.is_typing
+
 	# WASD hareketi (X/Z düzlemi) — önce yatay hız, sonra yerçekimi
 	var dir := Vector3.ZERO
-	if Input.is_action_pressed("move_up"):    dir.z -= 1
-	if Input.is_action_pressed("move_down"):  dir.z += 1
-	if Input.is_action_pressed("move_left"):  dir.x -= 1
-	if Input.is_action_pressed("move_right"): dir.x += 1
+	if not typing:
+		if Input.is_action_pressed("move_up"):    dir.z -= 1
+		if Input.is_action_pressed("move_down"):  dir.z += 1
+		if Input.is_action_pressed("move_left"):  dir.x -= 1
+		if Input.is_action_pressed("move_right"): dir.x += 1
 	dir = dir.normalized()
 	velocity.x = dir.x * speed
 	velocity.z = dir.z * speed
@@ -237,10 +241,10 @@ func _handle_local_input(delta: float) -> void:
 		shoot_pressed = Input.is_action_just_pressed("shoot")
 	else:
 		shoot_pressed = Input.is_action_pressed("shoot")
-	if shoot_pressed and current_weapon:
+	if shoot_pressed and current_weapon and not typing:
 		current_weapon.try_shoot(peer_id, team_id)
 
-	if Input.is_action_just_pressed("reload") and current_weapon:
+	if Input.is_action_just_pressed("reload") and current_weapon and not typing:
 		current_weapon.reload()
 
 	# Pozisyon senkronizasyonu
