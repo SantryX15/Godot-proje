@@ -148,15 +148,25 @@ func _request_active_players() -> void:
 # ─────────────────────────────────────────────
 
 func _spawn_card_and_door() -> void:
-	var card_pos := Vector3(randf_range(-10.0, 10.0), 0.0, randf_range(-10.0, 10.0))
-	var corners: Array[Vector3] = [
-		Vector3(-47.0, 0.0, -42.0),
-		Vector3( 47.0, 0.0, -42.0),
-		Vector3(-47.0, 0.0,  42.0),
-		Vector3( 47.0, 0.0,  42.0),
-	]
-	var door_pos: Vector3 = corners[randi() % corners.size()]
+	# Aday noktalar haritada (Map.tscn → CardPoints / DoorPoints Marker3D'leri) — labirent duvarına denk gelmesin diye
+	# rastgele koordinat yerine editörde yerleştirilmiş noktalardan biri seçilir.
+	var card_points := _get_marker_positions("CardPoints")
+	var door_points := _get_marker_positions("DoorPoints")
+	var card_pos: Vector3 = card_points.pick_random() if not card_points.is_empty() else Vector3.ZERO
+	var door_pos: Vector3 = door_points.pick_random() if not door_points.is_empty() else Vector3(-44.5, 0.0, -34.5)
 	_spawn_objects_rpc.rpc(card_pos, door_pos)
+
+
+func _get_marker_positions(group_name: String) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	var root := get_tree().current_scene.get_node_or_null(group_name)
+	if root == null:
+		push_warning("Haritada %s bulunamadı" % group_name)
+		return out
+	for child in root.get_children():
+		if child is Marker3D:
+			out.append((child as Marker3D).global_position)
+	return out
 
 
 @rpc("authority", "call_local", "reliable")

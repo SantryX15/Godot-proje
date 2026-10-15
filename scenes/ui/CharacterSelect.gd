@@ -269,9 +269,12 @@ func _build_card(char_data: Dictionary) -> PanelContainer:
 	sv.transparent_bg = false
 	sv.msaa_3d = Viewport.MSAA_2X
 	sv.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	# Her kartın kendi 3D dünyası — yoksa 5 önizleme aynı World3D'yi paylaşır ve
+	# tüm karakterler (ve ışıkları) her kartta üst üste görünür
+	sv.own_world_3d = true
 	svc.add_child(sv)
 
-	var preview := _build_preview_world(sv, char_color)
+	var preview := _build_preview_world(sv, char_name, char_color)
 
 	# Önizlemenin altını kart rengine erit
 	var fade_grad := Gradient.new()
@@ -346,7 +349,8 @@ func _build_card(char_data: Dictionary) -> PanelContainer:
 		var name_lbl := _make_label(stat_name.to_upper(), 9, COL_TEXT_DIM, _font_caps)
 		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		label_row.add_child(name_lbl)
-		label_row.add_child(_make_label("%g" % value, 10, COL_TEXT, _font_bold))
+		#label_row.add_child(_make_label("%g" % value, 10, COL_TEXT, _font_bold))
+		label_row.add_child(_make_label(str(value), 10, COL_TEXT, _font_bold))
 
 		var bar := _make_bar(char_color, 5)
 		bar.value = value / (STAT_MAX[stat_name] as float)
@@ -372,7 +376,7 @@ func _build_card(char_data: Dictionary) -> PanelContainer:
 
 
 ## SubViewport içine kodsuz Player.tscn + ışık + kamera kurar, döndürülecek kök node'u döner.
-func _build_preview_world(sv: SubViewport, char_color: Color) -> Node3D:
+func _build_preview_world(sv: SubViewport, char_name: String, char_color: Color) -> Node3D:
 	var world := Node3D.new()
 	sv.add_child(world)
 
@@ -401,9 +405,11 @@ func _build_preview_world(sv: SubViewport, char_color: Color) -> Node3D:
 
 	# CharacterMesh içindeki AnimationPlayer'ı bul, mixamo_com animasyonunu ayarla
 	var char_mesh: Node3D = player_inst.get_node("CharacterMesh")
+	if char_mesh.has_method("apply_outfit"):
+		char_mesh.apply_outfit(char_name)  # karaktere özel kıyafet (SurvivalistModel)
 	var ap := _find_anim_player(char_mesh)
 	if ap:
-		var candidates := ["mixamo_com", "mixamo.com", "Breathing Idle", "idle", "Idle"]
+		var candidates := ["Idle", "mixamo_com", "mixamo.com", "Breathing Idle", "idle"]
 		var anim_name := ""
 		for c in candidates:
 			if ap.has_animation(c):
@@ -421,32 +427,33 @@ func _build_preview_world(sv: SubViewport, char_color: Color) -> Node3D:
 				anim.loop_mode = Animation.LOOP_LINEAR
 			ap.autoplay = anim_name
 
-	# Karakterin rengiyle boyalı arka kenar ışığı
+	# Ana ışık nötr (kıyafet renkleri doğru görünsün); karakter rengi sadece arkadan kenar ışığı olarak
 	var key_light := OmniLight3D.new()
-	key_light.position    = Vector3(1.5, 3.0, -2.0)
-	key_light.light_color  = char_color
-	key_light.light_energy = 2.5
-	key_light.omni_range   = 9.0
+	key_light.position    = Vector3(0.9, 2.6, -2.2)
+	key_light.light_color  = Color(1.0, 0.96, 0.9)
+	key_light.light_energy = 2.2
+	key_light.omni_range   = 8.0
 	world.add_child(key_light)
 
 	var rim_light := OmniLight3D.new()
-	rim_light.position    = Vector3(-1.4, 2.2, 1.5)
+	rim_light.position    = Vector3(0.0, 2.4, 1.6)
 	rim_light.light_color  = char_color
-	rim_light.light_energy = 1.6
-	rim_light.omni_range   = 6.0
+	rim_light.light_energy = 2.0
+	rim_light.omni_range   = 5.0
 	world.add_child(rim_light)
 
-	# Dolgu ışığı (nötr beyaz)
+	# Dolgu ışığı (nötr, diğer taraftan)
 	var fill_light := OmniLight3D.new()
-	fill_light.position    = Vector3(-1.2, 2.0, -1.5)
+	fill_light.position    = Vector3(-1.5, 1.6, -1.8)
 	fill_light.light_energy = 1.0
 	fill_light.omni_range   = 7.0
 	world.add_child(fill_light)
 
-	# Kamera — karakterin üst gövdesini gösterir (CharacterMesh -Z yönüne bakar, kamera karşısında olmalı)
+	# Kamera — yakın plan: yüz + omuzlar (göğüs hizasından başın üstüne). CharacterMesh -Z yönüne bakar, kamera karşısında.
 	var cam := Camera3D.new()
-	cam.position         = Vector3(0.0, 1.3, -2.5)
-	cam.rotation_degrees = Vector3(-8.0, 180.0, 0.0)
+	cam.position         = Vector3(0.0, 1.62, -1.6)
+	cam.rotation_degrees = Vector3(-4.0, 180.0, 0.0)
+	cam.fov              = 30.0
 	world.add_child(cam)
 
 	return player_inst

@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://4any3bms6nmr"]
 
 [ext_resource type="Script" uid="uid://c77ypgatj76cv" path="res://scenes/player/Player.gd" id="1_player"]
-[ext_resource type="PackedScene" uid="uid://c0gcbk3wu3tsi" path="res://anims/Breathing Idle.fbx" id="2_charfbx"]
+[ext_resource type="PackedScene" uid="uid://csenp2rgquxtx" path="res://scenes/player/SurvivalistModel.tscn" id="2_charfbx"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_1"]
 size = Vector3(0.8, 1.8, 0.8)

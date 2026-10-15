@@ -61,6 +61,12 @@ var _end_stats: Label
 var _chat: ChatBox
 var _crosshair: Control
 
+# Güç envanteri
+var _powerups: Node = null
+var _item_slot: PanelContainer
+var _item_glyph: Label
+var _item_name: Label
+
 
 func _ready() -> void:
 	UITheme.apply(get_tree())
@@ -81,6 +87,7 @@ func _ready() -> void:
 	_setup_objective()
 	_setup_kill_feed()
 	_setup_player_card()
+	_setup_item_slot()
 	_setup_chat()
 	_setup_minimap()
 	_setup_death_overlay()
@@ -323,6 +330,67 @@ func _setup_player_card() -> void:
 	_ignore_mouse_recursive(card)
 
 
+## Tek slotluk güç envanteri — oyuncu kartının sağında. PowerupManager (Map'te kardeş node) sinyallerini dinler.
+func _setup_item_slot() -> void:
+	_item_slot = PanelContainer.new()
+	_item_slot.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	_item_slot.offset_left = 368
+	_item_slot.offset_top = -16
+	_item_slot.offset_bottom = -16
+	_item_slot.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_item_slot.custom_minimum_size = Vector2(104, 104)
+	_root.add_child(_item_slot)
+
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 2)
+	_item_slot.add_child(box)
+	var head := HBoxContainer.new()
+	box.add_child(head)
+	var cap := UITheme.label("GÜÇ", 9, UITheme.TEXT_DIM, UITheme.font_caps)
+	cap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(cap)
+	var key := PanelContainer.new()
+	key.add_theme_stylebox_override("panel", UITheme.style(Color(1, 1, 1, 0.08), 4, UITheme.BORDER, 1, 5, 0))
+	key.add_child(UITheme.label("Q", 10, UITheme.TEXT, UITheme.font_bold))
+	head.add_child(key)
+	_item_glyph = UITheme.label("—", 34, UITheme.TEXT_DIM, UITheme.font_bold)
+	_item_glyph.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(_item_glyph)
+	_item_name = UITheme.label("BOŞ", 9, UITheme.TEXT_DIM, UITheme.font_caps)
+	_item_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(_item_name)
+	_ignore_mouse_recursive(_item_slot)
+
+	_powerups = get_parent().get_node_or_null("PowerupManager")
+	if _powerups:
+		_powerups.inventory_changed.connect(_on_item_changed)
+		_powerups.notice.connect(_show_banner)
+	_on_item_changed(-1)
+
+
+func _on_item_changed(item_type: int) -> void:
+	var col := UITheme.TEXT_DIM
+	if item_type < 0 or _powerups == null:
+		_item_glyph.text = "—"
+		_item_name.text = "BOŞ"
+	else:
+		var info: Dictionary = _powerups.INFO[item_type]
+		col = info["color"]
+		_item_glyph.text = info["glyph"]
+		_item_name.text = info["name"]
+		# Alındığında kısa parlama
+		_item_slot.modulate = Color(1.6, 1.6, 1.6)
+		create_tween().tween_property(_item_slot, "modulate", Color.WHITE, 0.4)
+	_item_glyph.add_theme_color_override("font_color", col)
+	_item_name.add_theme_color_override("font_color", col)
+	var st := UITheme.style(Color(UITheme.BG, 0.8), 14, Color(col, 0.6) if item_type >= 0 else UITheme.BORDER, 1, 10, 8)
+	if item_type >= 0:
+		st.shadow_color = Color(col, 0.3)
+		st.shadow_size = 10
+	_item_slot.add_theme_stylebox_override("panel", st)
+
+
 func _setup_chat() -> void:
 	# Oyuncu kartının üstünde; kapalıyken sadece son mesajlar görünür ve solar (Enter / T ile açılır)
 	_chat = ChatBox.new()
@@ -340,8 +408,8 @@ func _setup_chat() -> void:
 func _setup_minimap() -> void:
 	var box := VBoxContainer.new()
 	box.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	box.offset_left = -196
-	box.offset_top = -216
+	box.offset_left = -216   # Minimap.SIZE 200×148 (labirent oranı) + başlık
+	box.offset_top = -184
 	box.offset_right = -16
 	box.offset_bottom = -16
 	box.add_theme_constant_override("separation", 4)

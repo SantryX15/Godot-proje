@@ -1,5 +1,7 @@
 ## Map.gd (3D)
-## Spawn noktalarını TeamManager'a kaydeder. Haritanın geri kalanı editörde yapılır.
+## Spawn noktalarını TeamManager'a kaydeder ve labirent duvarlarının çarpışmasını kurar.
+## Labirent: Maze/MazeMesh (asset model/Maze_walls.obj — Maze.obj'den ortalanmış, XZ ×0.5, 3 m yükseklik).
+## Kart/kapı aday noktaları CardPoints / DoorPoints altında (GameManager._spawn_card_and_door okur).
 
 extends Node3D
 
@@ -7,7 +9,20 @@ extends Node3D
 
 
 func _ready() -> void:
+	_build_maze_collision()
 	_register_spawn_points()
+
+
+## Duvar mesh'inden çarpışma şekli üretir (oyuncular + mermiler duvara takılır, layer 1)
+func _build_maze_collision() -> void:
+	var mesh_inst := get_node_or_null("Maze/MazeMesh") as MeshInstance3D
+	if mesh_inst == null or mesh_inst.mesh == null:
+		push_warning("Labirent mesh'i bulunamadı (Maze/MazeMesh)")
+		return
+	var shape := CollisionShape3D.new()
+	shape.shape = mesh_inst.mesh.create_trimesh_shape()
+	shape.transform = mesh_inst.transform
+	$Maze.add_child(shape)
 
 
 func _register_spawn_points() -> void:

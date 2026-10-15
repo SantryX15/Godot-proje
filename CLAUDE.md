@@ -102,22 +102,44 @@ Client'lar sadece `request_*` RPC'leriyle host'a istek yollar.
 
 ## scenes/player/Player.gd — hareket/nişan/hasar/ölüm (CharacterBody3D)
 
-**Dönüş mimarisi (ÖNEMLİ):** `look_at()` **Player ROOT'ta** uygulanır (`rotation.y`), WeaponHolder+Flashlight+
-CharacterMesh hepsi child olarak BİRLİKTE döner — ayrı ayrı döndürülmüyor (asker gibi gövdeyle nişan).
-`_broadcast_state(pos, aim_y)` ve `_interpolate_remote()` de root `rotation.y` taşır/lerp eder.
+**Dönüş mimarisi (ÖNEMLİ):** `look_at()` **Player ROOT'ta** uygulanır (`rotation.y` = nişan/fare), WeaponHolder+Flashlight
+root'la birlikte nişana döner. **CharacterMesh** ise root'a göre `_leg_yaw` kadar ek döner (`_update_leg_facing`):
+hareket ederken bacaklar hareket yönüne, `SpineTwistModifier` (Skeleton3D child, `SkeletonModifier3D`, spine_01..03)
+üst gövdeyi `-_leg_yaw` ile nişana geri çevirir (max `MAX_SPINE_TWIST` ~110°); dururken bacaklar nişana döner.
+Animasyon bu yüzden hep ileri oynar (geri koşu yok). `_mesh_base_basis` = tscn'deki 180° transform.
+Player.gd modifier'ı `preload` ile yükler (global class cache'e bağımlı değil). Ölüm/respawn `_reset_leg_facing()`.
+`_broadcast_state(pos, aim_y, mode)` ve `_interpolate_remote()` root `rotation.y` + hareket modu taşır/lerp eder.
 
-**CharacterMesh 180° çevrili:** Mixamo FBX yüzü Godot'un -Z-ileri kuralının tersine import edilmiş;
+**Hareket modları** (`MoveMode`): RUN / WALK (Shift, ×0.45, `Walk`) / CROUCH (Ctrl, ×0.35, `CrouchWalk`; dururken
+CrouchWalk `speed_scale=0` donar). `Input.is_physical_key_pressed` — project.godot input map'e eklenmedi. Sohbete yazarken yok sayılır.
+
+**CharacterMesh 180° çevrili:** model yüzü +Z'ye bakıyor (Godot -Z-ileri kuralının tersi);
 `Player.tscn`'de düzeltme transformu var. CharacterSelect.gd önizlemesi de buna göre ayarlı.
+
+**CharacterMesh = `SurvivalistModel.tscn`** (eski Mixamo mankeni `anims/Breathing Idle.fbx` yerine, tüm karakterler):
+`asset model/Survivalist/SK_Military_Survivalist.fbx` (UE mannequin iskeleti, 1.89 m, metre ölçekli) + `SurvivalistModel.gd`:
+**`apply_outfit(character)`** — `Player.initialize()` ve `CharacterSelect._build_preview_world()` çağırır (çağrılmazsa
+`DEFAULT_OUTFIT`). `OUTFITS[karakter]`: `vest` none/plain/pouches, `backpack`/`cap`/`gloves` bool, `skin` (parça → doku varyantı).
+Tank siyah ağır, Visioner yeşil hafif, Runner teçhizatsız, Sniper çöl, Medic gri+zeytin çantalı.
+Malzemeler kodla (`MATERIALS` → `_get_material`, `"malzeme:skin"` static cache, tüm oyuncular paylaşır):
+dokular `asset model/Survivalist_Textures/Textures/{Body,Top,Bottom,Equip}` (FBX'in kendi doku yolu KULLANILMIYOR —
+import'ta "Textures/Body/... bulunamadı" hataları zararsız). `.import` ayarları elle: normal map `normal_map_invert_y=true`
+(UE/DirectX), renk 2K, ao/rough/metal 1K. `FPS_Arms/.gdignore`. Doku yoksa `FALLBACK_COLORS`.
+FPS kolları (`ALWAYS_HIDDEN`) hep gizli. Animasyonlar `anims/survivalist_anims.res` (`tools/build_anim_library.gd` üretir):
+`Idle, Walk, Run, CrouchWalk, Talk, Jump, Death` (`anims/Basic+Demo+Animations/*.FBX` — aynı UE iskelet, doğrudan uyumlu;
+ik_* kemik, scale ve pelvis dışı position track'leri atılır) + yedek `Breathing Idle` (Mixamo bake, `tools/retarget_bake.gd`).
+`_setup_idle()` hepsini varsayılan kütüphaneye ekler, autoplay `Idle`. Kullanılmayan: Walk/CrouchWalk/Jump/Talk (mekanik yok).
 
 | Fonksiyon | Ne zaman | Not |
 |---|---|---|
 | `initialize(peer_id, team_id, character)` | spawn anında | stat/hız ayarla, `_find_anim_player`, `_play_idle`, `_add_render_layer` (BodyLight izolasyonu), `_disable_shadow_casting`, `is_local` ise `_apply_self_rim` |
 | `_handle_local_input(delta)` | `_physics_process`, sadece local | WASD, `look_at` (root), ateş, reload, 20Hz `_broadcast_state.rpc()` |
 | `_interpolate_remote(delta)` | `_physics_process`, uzak oyuncular | pos+rotation lerp |
+| `_update_animation(delta)` | `_physics_process` (local + uzak, ölüyken çağrılmaz) | hız = konum farkı/delta (uzaklarda velocity yok) → `_update_leg_facing` + `Idle` / `MOVE_ANIMS[move_mode]` (`speed_scale` = hız/`MOVE_ANIM_REF_SPEED[mode]`), blend `ANIM_BLEND` |
 | `_get_aim_target()` | `_handle_local_input` | mouse → kamera ray → Y=0.9 zemin düzlemi kesişimi |
 | `take_damage(amount, shooter_id)` (any_peer RPC) | `Bullet._on_body_entered` | **sadece host işler** (`if not is_host(): return`), `_sync_health.rpc()`, 0 ise `_die()` |
 | `_die(killer_id)` | `take_damage` | `_apply_death.rpc()` + `GameManager.handle_player_death()` |
-| `_apply_death()` (call_local RPC) | `_die` | mesh/flashlight/body_light gizle, collision disable (deferred), card_indicator gizle |
+| `_apply_death()` (call_local RPC) | `_die` | `Death` animasyonu oynar, mesh `_hide_corpse_later` ile anim bitince gizlenir (`_death_token` respawn'da iptal eder); flashlight/body_light/silah gizle, collision disable (deferred), card_indicator gizle |
 | `respawn(pos)` → `_apply_respawn()` (call_local RPC) | `GameManager._schedule_respawn` | can/visibility/collision resetle, `reset_physics_interpolation()`, `_card_pickup_blocked=0.5` |
 | `pick_up_card()` / `drop_card()` | `GameManager._apply_card_pickup_rpc` / `_apply_card_drop_rpc` | `card_indicator` sadece aynı takıma görünür |
 
@@ -149,11 +171,34 @@ CharacterMesh hepsi child olarak BİRLİKTE döner — ayrı ayrı döndürülm�
 
 ## scenes/world/ — harita, kart, kapı
 
-- `Map.gd`: SADECE spawn noktalarını okur (`SpawnPoints/Team{0..3}/Marker3D` çocukları) →
-  `TeamManager.register_spawn_points()`. Haritanın geri kalanı (duvar/zemin) **editörde kullanıcı tarafından** yapılıyor.
+- `Map.gd`: spawn noktalarını okur (`SpawnPoints/Team{0..3}/Marker3D` çocukları) → `TeamManager.register_spawn_points()`,
+  ve `_build_maze_collision()`: `Maze/MazeMesh` mesh'inden `create_trimesh_shape()` ile duvar çarpışması (layer 1 →
+  oyuncu + mermi takılır). Haritanın geri kalanı **editörde kullanıcı tarafından** düzenlenir.
+- **Labirent:** `asset model/Maze_walls.obj` = `Maze.obj`'nin sadece `maze` objesi (zemin Plane01 atıldı), ortalanmış,
+  XZ ×0.5, Y → 3 m, düz normaller (`tools/maze_convert.py` ile üretildi; nokta seçimi + minimap PNG `tools/maze_points.py`
+  — orijinali değiştirme, script'le yeniden üret).
+  Ayak izi x ±62, z ±46; koridor ~4 m, duvar ~2 m kalın. Zemin 126×94, `Bounds` görünmez sınır (üst girişler dışarı açılmasın).
+  `Maze_minimap.png` (1 px = 1 m duvar maskesi) → Minimap `MAP_MIN/MAX` ile birebir.
+- `CardPoints` / `DoorPoints` (Map.tscn Marker3D'leri): `GameManager._spawn_card_and_door()` → `_get_marker_positions()`
+  rastgele birini seçer (eski sabit koordinatlar duvara denk geliyordu). `TeamManager.get_spawn_position` ofseti ±0.6 m.
 - `Card.gd` (Area3D): `_on_body_entered` — sadece local oyuncu + ölü değil + kart yok + pickup-blocked değilse →
   host ise `GameManager.handle_card_pickup()` direkt, client ise `request_card_pickup.rpc_id(1,...)`.
 - `Door.gd` (Area3D): aynı patern, `has_card` kontrolü → `handle_card_delivered()` / `request_card_delivery`.
+- **`PowerupManager.gd`** (Map.tscn → `PowerupManager` Node; RPC'ler bu node path'iyle, tüm peer'larda aynı):
+  host `_process` → `SPAWN_INTERVAL` (8-15s) aralıkla `PowerupPoints/Point*` (33 köşe, `tools/maze_corners.py`)
+  üzerinde `_spawn_rpc(id, type, pos, lifetime 5-10s)`, `MAX_ACTIVE=3`, ömür dolunca `_despawn_rpc`.
+  Tipler `Type {BOMB, HEAL, INTEL_SAT, ENEMY_SAT}`, görünüm/isim `INFO` (HUD/Minimap/Powerup ortak).
+  Alma: `Powerup.gd` yerel oyuncu ≤1.3 m + slot boşsa `local_touched` → `_request_pickup` (host: mesafe/ölü/slot
+  kontrolü) → `_set_item_rpc(peer, type)` (herkese; `inventory` peer→type, tek slot). Ölünce `kill_happened` → slot boşalır.
+  Kullanma: `Q` (`_unhandled_key_input`, sohbette değilken) → `_request_use(aim)` host:
+  HEAL +60 (`_sync_health`), BOMB `_throw_bomb` (maks 12 m, duvara ışınla kırpılır) → `_bomb_rpc` (Bomb.gd görsel) +
+  `_detonate_later` (r=4 m, 75→%35 düşüş, duvar arkası/dost/kendisi hasarsız, `take_damage(dmg, peer)` → kill kredisi),
+  INTEL_SAT/ENEMY_SAT → `_reveal_rpc(team, "objectives"/"enemies", 8/6 s)` → o takımda `reveal_until`, Minimap çizer;
+  düşmanlara "konumunuz tespit edildi" uyarısı. Sinyaller: `inventory_changed`, `reveal_started`, `notice` (HUD banner).
+  Geç katılan client 1.5 s sonra `_request_sync`. HUD envanter slotu oyuncu kartının sağında.
+- `ProximityReveal.gd` (Card.tscn + Door.tscn + Powerup child Node; alt ağacın tümünü tarar): parent'ın OmniLight3D/Label3D/MeshInstance3D'lerini SADECE
+  yerel oyuncu yaklaşınca açar (`reveal_far`→`reveal_near` smoothstep + fade). Kart 12→5 m, kapı 16→7 m.
+  Tamamen yerel görsel, ağ/mantık yok; Area3D çarpışması etkilenmez.
 - `CameraController.gd`: Player'ın child'ı DEĞİL, Map.tscn'de bağımsız Camera3D. `GameManager.local_player_spawned`
   sinyaline bağlanır. Exponential lerp (`1-exp(-7*delta)`), OFFSET `(0,14,12)`, PITCH -50°.
 
@@ -180,6 +225,8 @@ CharacterMesh hepsi child olarak BİRLİKTE döner — ayrı ayrı döndürülm�
   Oyuncu metni BBCode'a `[`→`[lb]` ile kaçışlanır. Lobby (alt sol) + HUD (oyuncu kartı üstü) kullanır.
 - **CharacterSelect.gd**: 5 karakter kartı, her biri SubViewport içinde Player.tscn önizlemesi
   (`set_script(null)` ile kodsuz, sadece görsel; kamera/ışık CharacterMesh'in 180° çevrili yönüne göre ayarlı).
+  **`sv.own_world_3d = true` şart** — yoksa 5 SubViewport aynı World3D'yi paylaşır, tüm modeller her kartta üst üste görünür.
+  Önizlemede `CharacterMesh.apply_outfit(char_name)` çağrılır; ana ışık nötr, karakter rengi sadece arka kenar ışığı.
   Seçim → `NetworkManager.request_select_character()`.
 - **HUD.gd**: UI tamamen kodla (tscn sadece CanvasLayer), UITheme paleti, tüm katmanlar `_root` (mouse IGNORE) altında.
   Skor (sol üst, kendi takımı vurgulu), hedef çipi + uyarı bandı (üst orta; `_carrier_peer` card_picked_up/dropped ile

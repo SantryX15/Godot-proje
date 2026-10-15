@@ -50,6 +50,36 @@ var has_card: bool = false
 
 var _char_mesh: Node3D = null
 var _anim_player: AnimationPlayer = null
+
+## Animasyon (SurvivalistModel kütüphanesi: Idle/Run/Walk/Death/...)
+const ANIM_IDLE := &"Idle"
+const ANIM_RUN := &"Run"
+const ANIM_WALK := &"Walk"
+const ANIM_CROUCH := &"CrouchWalk"
+const ANIM_DEATH := &"Death"
+const ANIM_BLEND := 0.18             # geçiş süresi (sn)
+const ANIM_MOVE_THRESHOLD := 0.4     # m/s üstü = hareket ediyor
+
+## Hareket modu — Shift yürüyüş, Ctrl eğilme (local tuşlar, uzaklara _broadcast_state ile senkron)
+enum MoveMode { RUN, WALK, CROUCH }
+const MOVE_SPEED_MULT: Array[float] = [1.0, 0.45, 0.35]           # karakter hızının çarpanı
+const MOVE_ANIMS: Array[StringName] = [&"Run", &"Walk", &"CrouchWalk"]
+## Animasyonun 1.0x oynadığı hız (m/s) — ayak kaymasın diye gerçek hızla oranlanır
+## (Run: Tank 5.5 → ~0.9x, Runner 13 → ~2.2x; Walk/Crouch karakter hızının %45/%35'i)
+const MOVE_ANIM_REF_SPEED: Array[float] = [6.0, 2.6, 2.0]
+var move_mode: int = MoveMode.RUN
+
+## Bacak yönü / omurga dönüşü (bkz _update_leg_facing)
+const MAX_SPINE_TWIST := 1.92  # ~110°
+const LEG_TURN_SPEED := 10.0
+var _leg_yaw := 0.0
+var _mesh_base_basis := Basis.IDENTITY
+const SPINE_TWIST_SCRIPT := preload("res://scenes/player/SpineTwistModifier.gd")
+var _spine_twist: Node = null  # SpineTwistModifier (preload — global class cache'e bağımlı olmasın)
+var _idle_anim: StringName = &""
+var _last_anim_pos: Vector3 = Vector3.ZERO
+var _move_speed := 0.0
+var _death_token := 0
 var _target_position: Vector3 = Vector3.ZERO
 var _target_aim_y: float = 0.0
 var _sync_timer: float = 0.0
@@ -71,6 +101,15 @@ func initialize(p_peer_id: int, p_team_id: int, p_character: String = "Visioner"
 	# FBX karakter mesh'ini bul
 	_char_mesh = get_node_or_null("CharacterMesh")
 	if _char_mesh:
+		# Karaktere göre kıyafet (SurvivalistModel.apply_outfit)
+		if _char_mesh.has_method("apply_outfit"):
+			_char_mesh.apply_outfit(p_character)
+		# Bacaklar hareket yönüne / üst gövde nişana (bkz _update_leg_facing)
+		_mesh_base_basis = _char_mesh.transform.basis
+		var skeletons := _char_mesh.find_children("*", "Skeleton3D", true, false)
+		if not skeletons.is_empty() and _spine_twist == null:
+			_spine_twist = SPINE_TWIST_SCRIPT.new()
+			(skeletons[0] as Skeleton3D).add_child(_spine_twist)
 		_anim_player = _find_anim_player(_char_mesh)
 		_play_idle()
 		# BodyLight sadece karakter mesh'ine değsin (zemine/duvara ışık/gölge taşmasın)
@@ -97,6 +136,7 @@ func initialize(p_peer_id: int, p_team_id: int, p_character: String = "Visioner"
 	body_light.visible = is_local
 
 	_target_position = global_position
+	_last_anim_pos = global_position
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_ON
 	reset_physics_interpolation()
 
@@ -147,7 +187,7 @@ func _play_idle() -> void:
 	if all_anims.is_empty():
 		return
 	# Tam isim eşleşmesi
-	var candidates := ["mixamo_com", "mixamo.com", "Breathing Idle", "idle", "Idle"]
+	var candidates := ["Idle", "mixamo_com", "mixamo.com", "Breathing Idle", "idle"]
 	var anim_name := ""
 	for c in candidates:
 		if _anim_player.has_animation(c):
@@ -174,7 +214,74 @@ func _play_idle() -> void:
 	var anim: Animation = _anim_player.get_animation(anim_name)
 	if anim and anim.loop_mode == Animation.LOOP_NONE:
 		anim.loop_mode = Animation.LOOP_LINEAR
+	_idle_anim = StringName(anim_name)
+	_anim_player.speed_scale = 1.0
 	_anim_player.play(anim_name)
+
+
+## Hareket animasyonu (local + uzak oyuncular): hız konum farkından ölçülür (uzaklarda velocity yok),
+## mod (koşu/yürüyüş/eğilme) local'de tuşlardan, uzakta _broadcast_state'ten gelir.
+## Hareket: Run / Walk / CrouchWalk — adım hızı gerçek hıza göre, bakışa ters gidişte ters oynar.
+## Duruş: Idle; eğilirken CrouchWalk ilk karesinde donar (ayrı çömelme-bekleme animasyonu yok).
+func _update_animation(delta: float) -> void:
+	if _anim_player == null or delta <= 0.0:
+		return
+	var p := global_position
+	var step := Vector3(p.x - _last_anim_pos.x, 0.0, p.z - _last_anim_pos.z)
+	_last_anim_pos = p
+	_move_speed = lerpf(_move_speed, step.length() / delta, 1.0 - exp(-12.0 * delta))
+
+	var moving := _move_speed > ANIM_MOVE_THRESHOLD
+	_update_leg_facing(step, moving, delta)
+
+	var clip: StringName = MOVE_ANIMS[move_mode]
+	if not _anim_player.has_animation(clip):
+		clip = ANIM_RUN
+	if moving and _anim_player.has_animation(clip):
+		# Bacaklar hareket yönüne döndüğü için animasyon hep ileri oynar
+		_set_anim(clip, clampf(_move_speed / float(MOVE_ANIM_REF_SPEED[move_mode]), 0.6, 2.2))
+	elif move_mode == MoveMode.CROUCH and _anim_player.has_animation(ANIM_CROUCH):
+		if _anim_player.current_animation != ANIM_CROUCH:
+			_anim_player.play(ANIM_CROUCH, ANIM_BLEND)
+			_anim_player.seek(0.0, true)
+		_anim_player.speed_scale = 0.0  # çömelmiş pozda bekle
+	else:
+		# "Idle" varsa her zaman onu kullan (kütüphane initialize'dan sonra yüklenmiş olsa bile)
+		var idle: StringName = ANIM_IDLE if _anim_player.has_animation(ANIM_IDLE) else _idle_anim
+		if idle != &"":
+			_set_anim(idle, 1.0)
+
+
+## Bacaklar hareket yönüne, üst gövde nişana: Player ROOT (= nişan, fener + silah) fareye bakmaya devam eder;
+## sadece CharacterMesh root'a göre `_leg_yaw` kadar döner, omurga (SpineTwistModifier) aynı açıyı geri çevirir
+## (en fazla MAX_SPINE_TWIST — fare tam arkadaysa üst gövde bir miktar yana bakar). Dururken bacaklar nişana döner.
+func _update_leg_facing(step: Vector3, moving: bool, delta: float) -> void:
+	if _char_mesh == null:
+		return
+	var target := 0.0
+	if moving and step.length() > 0.0001:
+		var move_yaw := atan2(-step.x, -step.z)  # rotation.y = θ ⇒ ileri = (-sinθ, 0, -cosθ)
+		target = wrapf(move_yaw - rotation.y, -PI, PI)
+	# Hedefi mevcut açıya göre aç (±180° civarında sağ/sol arasında zıplamasın)
+	target = _leg_yaw + wrapf(target - _leg_yaw, -PI, PI)
+	_leg_yaw = wrapf(lerpf(_leg_yaw, target, 1.0 - exp(-LEG_TURN_SPEED * delta)), -PI, PI)
+	_char_mesh.transform.basis = Basis(Vector3.UP, _leg_yaw) * _mesh_base_basis
+	if _spine_twist:
+		_spine_twist.twist = clampf(-_leg_yaw, -MAX_SPINE_TWIST, MAX_SPINE_TWIST)
+
+
+func _reset_leg_facing() -> void:
+	_leg_yaw = 0.0
+	if _char_mesh:
+		_char_mesh.transform.basis = _mesh_base_basis
+	if _spine_twist:
+		_spine_twist.twist = 0.0
+
+
+func _set_anim(anim_name: StringName, rate: float) -> void:
+	if _anim_player.current_animation != anim_name:
+		_anim_player.play(anim_name, ANIM_BLEND)
+	_anim_player.speed_scale = rate
 
 
 func _equip_default_weapon() -> void:
@@ -201,6 +308,7 @@ func _physics_process(delta: float) -> void:
 		_handle_local_input(delta)
 	else:
 		_interpolate_remote(delta)
+	_update_animation(delta)
 
 
 func _handle_local_input(delta: float) -> void:
@@ -218,8 +326,17 @@ func _handle_local_input(delta: float) -> void:
 		if Input.is_action_pressed("move_left"):  dir.x -= 1
 		if Input.is_action_pressed("move_right"): dir.x += 1
 	dir = dir.normalized()
-	velocity.x = dir.x * speed
-	velocity.z = dir.z * speed
+
+	# Hareket modu: Ctrl = eğilerek (en yavaş), Shift = yürüyerek, yoksa koşu. Uzaklara _broadcast_state ile gider.
+	move_mode = MoveMode.RUN
+	if not typing:
+		if Input.is_physical_key_pressed(KEY_CTRL):
+			move_mode = MoveMode.CROUCH
+		elif Input.is_physical_key_pressed(KEY_SHIFT):
+			move_mode = MoveMode.WALK
+	var move_speed: float = speed * MOVE_SPEED_MULT[move_mode]
+	velocity.x = dir.x * move_speed
+	velocity.z = dir.z * move_speed
 
 	# Yerçekimi
 	if is_on_floor():
@@ -252,7 +369,7 @@ func _handle_local_input(delta: float) -> void:
 	if _sync_timer >= SYNC_RATE:
 		_sync_timer = 0.0
 		if multiplayer.has_multiplayer_peer() and multiplayer.get_peers().size() > 0:
-			_broadcast_state.rpc(global_position, rotation.y)
+			_broadcast_state.rpc(global_position, rotation.y, move_mode)
 
 
 func _get_aim_target() -> Vector3:
@@ -275,11 +392,12 @@ func _interpolate_remote(delta: float) -> void:
 
 
 @rpc("any_peer", "unreliable_ordered")
-func _broadcast_state(pos: Vector3, aim_y: float) -> void:
+func _broadcast_state(pos: Vector3, aim_y: float, mode: int = MoveMode.RUN) -> void:
 	if is_local:
 		return
 	_target_position = pos
 	_target_aim_y = aim_y
+	move_mode = clampi(mode, MoveMode.RUN, MoveMode.CROUCH)
 
 
 # ─────────────────────────────────────────────
@@ -319,14 +437,30 @@ func _die(killer_peer_id: int) -> void:
 func _apply_death() -> void:
 	is_dead = true
 	has_card = false
+	_death_token += 1
+	_reset_leg_facing()
 	if _char_mesh:
-		_char_mesh.visible = false
+		if _anim_player and _anim_player.has_animation(ANIM_DEATH):
+			# Ölüm animasyonu oynar, bitince ceset gizlenir (arada respawn olursa gizleme iptal)
+			_anim_player.speed_scale = 1.0
+			_anim_player.play(ANIM_DEATH, ANIM_BLEND)
+			_hide_corpse_later(_death_token, _anim_player.get_animation(ANIM_DEATH).length + 0.6)
+		else:
+			_char_mesh.visible = false
 	flashlight.visible = false
 	body_light.visible = false
 	collision_shape.set_deferred("disabled", true)
 	if current_weapon:
 		current_weapon.hide()
 	card_indicator.visible = false
+
+
+func _hide_corpse_later(token: int, wait: float) -> void:
+	await get_tree().create_timer(wait).timeout
+	if not is_instance_valid(self) or token != _death_token or not is_dead:
+		return
+	if _char_mesh:
+		_char_mesh.visible = false
 
 
 # ─────────────────────────────────────────────
@@ -346,6 +480,10 @@ func _apply_respawn(spawn_pos: Vector3) -> void:
 		emit_signal("health_changed", health)
 	global_position = spawn_pos
 	_target_position = spawn_pos
+	_last_anim_pos = spawn_pos  # ışınlanma koşu animasyonu tetiklemesin
+	_move_speed = 0.0
+	_death_token += 1
+	_reset_leg_facing()
 	_card_pickup_blocked = 0.5
 	reset_physics_interpolation()
 	if _char_mesh:

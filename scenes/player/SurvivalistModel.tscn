@@ -1,0 +1,9 @@
+[gd_scene format=3 uid="uid://csenp2rgquxtx"]
+
+[ext_resource type="Script" path="res://scenes/player/SurvivalistModel.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://asset model/Survivalist/SK_Military_Survivalist.fbx" id="2_fbx"]
+
+[node name="SurvivalistModel" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="Model" parent="." instance=ExtResource("2_fbx")]

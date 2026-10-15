@@ -49,7 +49,8 @@ func get_spawn_position(team_id: int) -> Vector3:
 		push_warning("Takım %d için spawn noktası yok!" % team_id)
 		return Vector3.ZERO
 	var base: Vector3 = points[randi() % points.size()]
-	return base + Vector3(randf_range(-2.5, 2.5), 0.0, randf_range(-2.5, 2.5))
+	# Küçük ofset: labirent koridorları 4 m — büyük ofset oyuncuyu duvara sokar (noktalar duvardan ≥1.5 m uzakta)
+	return base + Vector3(randf_range(-0.6, 0.6), 0.0, randf_range(-0.6, 0.6))
 
 
 func get_color(team_id: int) -> Color:
