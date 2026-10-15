@@ -60,14 +60,32 @@ const ANIM_DEATH := &"Death"
 const ANIM_BLEND := 0.18             # geçiş süresi (sn)
 const ANIM_MOVE_THRESHOLD := 0.4     # m/s üstü = hareket ediyor
 
-## Hareket modu — Shift yürüyüş, Ctrl eğilme (local tuşlar, uzaklara _broadcast_state ile senkron)
+## Hareket modu — varsayılan yürüyüş, Shift koşu (dayanıklılıklı), Ctrl çömelme (süreli, mermiler üstünden geçer).
+## Local tuşlar, uzaklara _broadcast_state ile senkron (host çömelme bağışıklığını bu değerle uygular).
 enum MoveMode { RUN, WALK, CROUCH }
-const MOVE_SPEED_MULT: Array[float] = [1.0, 0.45, 0.35]           # karakter hızının çarpanı
+const MOVE_SPEED_MULT: Array[float] = [1.0, 0.55, 0.35]           # karakter hızının çarpanı (speed = koşu hızı)
 const MOVE_ANIMS: Array[StringName] = [&"Run", &"Walk", &"CrouchWalk"]
 ## Animasyonun 1.0x oynadığı hız (m/s) — ayak kaymasın diye gerçek hızla oranlanır
-## (Run: Tank 5.5 → ~0.9x, Runner 13 → ~2.2x; Walk/Crouch karakter hızının %45/%35'i)
-const MOVE_ANIM_REF_SPEED: Array[float] = [6.0, 2.6, 2.0]
-var move_mode: int = MoveMode.RUN
+## (Run: Tank 5.5 → ~0.9x, Runner 13 → ~2.2x; Walk/Crouch karakter hızının %55/%35'i)
+const MOVE_ANIM_REF_SPEED: Array[float] = [6.0, 3.0, 2.0]
+var move_mode: int = MoveMode.WALK
+
+## Dayanıklılık (0..1) — sadece local oyuncuda işler, HUD okur
+const SPRINT_MAX_TIME := 4.0        # tam dolu → kaç sn koşulur
+const SPRINT_REGEN_TIME := 5.0      # boştan tama dolma süresi
+const SPRINT_UNLOCK := 0.4          # tükendiyse bu seviyeye dolana kadar koşulamaz
+const CROUCH_MAX_TIME := 3.0        # basılı tutarak en fazla
+const CROUCH_REGEN_TIME := 4.0
+const CROUCH_UNLOCK := 0.5
+const STAMINA_REGEN_DELAY := 0.6    # bıraktıktan sonra dolmaya başlama gecikmesi
+const DAMAGE_BULLET := 0
+const DAMAGE_EXPLOSION := 1
+var sprint_stamina := 1.0
+var crouch_stamina := 1.0
+var sprint_locked := false          # tükendi, yenileniyor
+var crouch_locked := false
+var _sprint_delay := 0.0
+var _crouch_delay := 0.0
 
 ## Bacak yönü / omurga dönüşü (bkz _update_leg_facing)
 const MAX_SPINE_TWIST := 1.92  # ~110°
@@ -327,13 +345,8 @@ func _handle_local_input(delta: float) -> void:
 		if Input.is_action_pressed("move_right"): dir.x += 1
 	dir = dir.normalized()
 
-	# Hareket modu: Ctrl = eğilerek (en yavaş), Shift = yürüyerek, yoksa koşu. Uzaklara _broadcast_state ile gider.
-	move_mode = MoveMode.RUN
-	if not typing:
-		if Input.is_physical_key_pressed(KEY_CTRL):
-			move_mode = MoveMode.CROUCH
-		elif Input.is_physical_key_pressed(KEY_SHIFT):
-			move_mode = MoveMode.WALK
+	# Hareket modu: varsayılan yürüyüş; Ctrl = çömelme, Shift = koşu (ikisi de süreli + yenilenir)
+	_update_move_mode(dir, typing, delta)
 	var move_speed: float = speed * MOVE_SPEED_MULT[move_mode]
 	velocity.x = dir.x * move_speed
 	velocity.z = dir.z * move_speed
@@ -372,6 +385,54 @@ func _handle_local_input(delta: float) -> void:
 			_broadcast_state.rpc(global_position, rotation.y, move_mode)
 
 
+## Çömelme (Ctrl basılı, en fazla CROUCH_MAX_TIME) önceliklidir; sonra koşu (Shift + hareket, SPRINT_MAX_TIME).
+## Tükenen dayanıklılık kilitlenir, *_UNLOCK seviyesine dolana kadar o mod kullanılamaz. Bırakınca
+## STAMINA_REGEN_DELAY sonra dolar. Çömelmesi biten oyuncu otomatik kalkar.
+func _update_move_mode(dir: Vector3, typing: bool, delta: float) -> void:
+	var want_crouch := not typing and Input.is_physical_key_pressed(KEY_CTRL)
+	var want_sprint := not typing and Input.is_physical_key_pressed(KEY_SHIFT) and dir != Vector3.ZERO
+	move_mode = MoveMode.WALK
+
+	if want_crouch and not crouch_locked and crouch_stamina > 0.0:
+		move_mode = MoveMode.CROUCH
+		crouch_stamina = maxf(crouch_stamina - delta / CROUCH_MAX_TIME, 0.0)
+		_crouch_delay = STAMINA_REGEN_DELAY
+		if crouch_stamina <= 0.0:
+			crouch_locked = true
+	else:
+		_crouch_delay -= delta
+		if _crouch_delay <= 0.0:
+			crouch_stamina = minf(crouch_stamina + delta / CROUCH_REGEN_TIME, 1.0)
+		if crouch_locked and crouch_stamina >= CROUCH_UNLOCK:
+			crouch_locked = false
+
+	if move_mode != MoveMode.CROUCH and want_sprint and not sprint_locked and sprint_stamina > 0.0:
+		move_mode = MoveMode.RUN
+		sprint_stamina = maxf(sprint_stamina - delta / SPRINT_MAX_TIME, 0.0)
+		_sprint_delay = STAMINA_REGEN_DELAY
+		if sprint_stamina <= 0.0:
+			sprint_locked = true
+	else:
+		_sprint_delay -= delta
+		if _sprint_delay <= 0.0:
+			sprint_stamina = minf(sprint_stamina + delta / SPRINT_REGEN_TIME, 1.0)
+		if sprint_locked and sprint_stamina >= SPRINT_UNLOCK:
+			sprint_locked = false
+
+
+func _reset_stamina() -> void:
+	sprint_stamina = 1.0
+	crouch_stamina = 1.0
+	sprint_locked = false
+	crouch_locked = false
+	move_mode = MoveMode.WALK
+
+
+## Çömelmiş (ve canlı) oyuncunun üstünden mermi geçer — Bullet.gd ve host take_damage kullanır
+func is_crouching() -> bool:
+	return move_mode == MoveMode.CROUCH and not is_dead
+
+
 func _get_aim_target() -> Vector3:
 	var cam := get_viewport().get_camera_3d()
 	if cam == null:
@@ -392,7 +453,7 @@ func _interpolate_remote(delta: float) -> void:
 
 
 @rpc("any_peer", "unreliable_ordered")
-func _broadcast_state(pos: Vector3, aim_y: float, mode: int = MoveMode.RUN) -> void:
+func _broadcast_state(pos: Vector3, aim_y: float, mode: int = MoveMode.WALK) -> void:
 	if is_local:
 		return
 	_target_position = pos
@@ -404,11 +465,15 @@ func _broadcast_state(pos: Vector3, aim_y: float, mode: int = MoveMode.RUN) -> v
 # Hasar — sadece SERVER işler
 # ─────────────────────────────────────────────
 
+## source: DAMAGE_BULLET (mermi — çömelmiş hedefe işlemez) / DAMAGE_EXPLOSION (bomba — çömelme korumaz)
 @rpc("any_peer", "reliable")
-func take_damage(amount: float, shooter_peer_id: int) -> void:
+func take_damage(amount: float, shooter_peer_id: int, source: int = DAMAGE_BULLET) -> void:
 	if not NetworkManager.is_host():
 		return
 	if is_dead:
+		return
+	# Çömelme: mermiler üstünden geçer (host, hedefin _broadcast_state ile gelen moduna göre karar verir)
+	if source == DAMAGE_BULLET and is_crouching():
 		return
 	health -= amount
 	health = clampf(health, 0.0, max_health)
@@ -484,6 +549,7 @@ func _apply_respawn(spawn_pos: Vector3) -> void:
 	_move_speed = 0.0
 	_death_token += 1
 	_reset_leg_facing()
+	_reset_stamina()
 	_card_pickup_blocked = 0.5
 	reset_physics_interpolation()
 	if _char_mesh:

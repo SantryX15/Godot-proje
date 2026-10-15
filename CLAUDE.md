@@ -110,8 +110,14 @@ Animasyon bu yüzden hep ileri oynar (geri koşu yok). `_mesh_base_basis` = tscn
 Player.gd modifier'ı `preload` ile yükler (global class cache'e bağımlı değil). Ölüm/respawn `_reset_leg_facing()`.
 `_broadcast_state(pos, aim_y, mode)` ve `_interpolate_remote()` root `rotation.y` + hareket modu taşır/lerp eder.
 
-**Hareket modları** (`MoveMode`): RUN / WALK (Shift, ×0.45, `Walk`) / CROUCH (Ctrl, ×0.35, `CrouchWalk`; dururken
-CrouchWalk `speed_scale=0` donar). `Input.is_physical_key_pressed` — project.godot input map'e eklenmedi. Sohbete yazarken yok sayılır.
+**Hareket modları** (`MoveMode`, `_update_move_mode`): **varsayılan WALK** (×0.55, `Walk`) / RUN (Shift + hareket, ×1.0, `Run`)
+/ CROUCH (Ctrl, ×0.35, `CrouchWalk`; dururken `speed_scale=0` donar). Dayanıklılık (sadece local, HUD okur):
+`sprint_stamina` (`SPRINT_MAX_TIME=4s`, dolum 5s) ve `crouch_stamina` (`CROUCH_MAX_TIME=3s`, dolum 4s); bırakınca
+`STAMINA_REGEN_DELAY` sonra dolar; tükenirse `*_locked` → `SPRINT_UNLOCK=0.4` / `CROUCH_UNLOCK=0.5`'e dolana kadar kullanılamaz
+(çömelmesi biten otomatik kalkar). Respawn'da `_reset_stamina()`. `Input.is_physical_key_pressed` — project.godot'ya eklenmedi.
+**Çömelme bağışıklığı:** `is_crouching()` → `Bullet._on_body_entered` mermiyi yok etmeden geçirir; host
+`take_damage(amount, shooter, source)` `source==DAMAGE_BULLET` ise çömelmiş hedefe işlemez (host, `_broadcast_state` modunu kullanır).
+Bomba `DAMAGE_EXPLOSION` (1) gönderir → çömelme korumaz.
 
 **CharacterMesh 180° çevrili:** model yüzü +Z'ye bakıyor (Godot -Z-ileri kuralının tersi);
 `Player.tscn`'de düzeltme transformu var. CharacterSelect.gd önizlemesi de buna göre ayarlı.
@@ -196,6 +202,11 @@ ik_* kemik, scale ve pelvis dışı position track'leri atılır) + yedek `Breat
   INTEL_SAT/ENEMY_SAT → `_reveal_rpc(team, "objectives"/"enemies", 8/6 s)` → o takımda `reveal_until`, Minimap çizer;
   düşmanlara "konumunuz tespit edildi" uyarısı. Sinyaller: `inventory_changed`, `reveal_started`, `notice` (HUD banner).
   Geç katılan client 1.5 s sonra `_request_sync`. HUD envanter slotu oyuncu kartının sağında.
+- **`WallLamps.gd`** (Map.tscn → `WallLamps` Node3D, çocukları `Lamp*` Marker3D — `tools/maze_lamps.py` üretir,
+  32 adet, editörde taşınabilir): her marker'da armatür + emissive ampul + OmniLight (gölgesiz, r=6.5) +
+  `LightShaft.gdshader` huzmesi (additive, kenar/aşağı sönümlü). Marker -Z'si koridora bakar, y=2.75 (duvar tepesi 3 m).
+  Tip lamba sırasına göre seed'li RNG ile (her client'ta aynı): STEADY %55 sodyum, FLICKER %30 floresan patlamalı,
+  DYING %15 çoğunlukla sönük. Tamamen yerel görsel, ağ yok.
 - `ProximityReveal.gd` (Card.tscn + Door.tscn + Powerup child Node; alt ağacın tümünü tarar): parent'ın OmniLight3D/Label3D/MeshInstance3D'lerini SADECE
   yerel oyuncu yaklaşınca açar (`reveal_far`→`reveal_near` smoothstep + fade). Kart 12→5 m, kapı 16→7 m.
   Tamamen yerel görsel, ağ/mantık yok; Area3D çarpışması etkilenmez.

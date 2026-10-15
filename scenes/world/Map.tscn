@@ -6,6 +6,7 @@
 [ext_resource type="Script" uid="uid://mbwlrq0rtfam" path="res://scenes/world/CameraController.gd" id="4_cam"]
 [ext_resource type="Mesh" path="res://asset model/Maze_walls.obj" id="5_maze"]
 [ext_resource type="Script" path="res://scenes/world/PowerupManager.gd" id="6_powerup"]
+[ext_resource type="Script" path="res://scenes/world/WallLamps.gd" id="7_lamps"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ground"]
 albedo_color = Color(0.1, 0.1, 0.12, 1)
@@ -276,6 +277,105 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9.5, 0, 34.5)
 
 [node name="Point32" type="Marker3D" parent="PowerupPoints"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 26.5, 0, 34.5)
+
+[node name="WallLamps" type="Node3D" parent="."]
+script = ExtResource("7_lamps")
+
+[node name="Lamp0" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -28.50, 2.75, 25.00)
+
+[node name="Lamp1" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 19.00, 2.75, 35.50)
+
+[node name="Lamp2" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 4.50, 2.75, -14.00)
+
+[node name="Lamp3" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -35.00, 2.75, -0.50)
+
+[node name="Lamp4" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 32.50, 2.75, -25.00)
+
+[node name="Lamp5" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 35.00, 2.75, 3.50)
+
+[node name="Lamp6" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -33.50, 2.75, 43.00)
+
+[node name="Lamp7" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 44.50, 2.75, 22.00)
+
+[node name="Lamp8" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 53.00, 2.75, -0.50)
+
+[node name="Lamp9" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -37.00, 2.75, -14.50)
+
+[node name="Lamp10" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 4.50, 2.75, 40.00)
+
+[node name="Lamp11" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 42.50, 2.75, -39.00)
+
+[node name="Lamp12" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 56.00, 2.75, 38.50)
+
+[node name="Lamp13" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -29.00, 2.75, -38.50)
+
+[node name="Lamp14" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -47.00, 2.75, 25.50)
+
+[node name="Lamp15" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -7.00, 2.75, 11.50)
+
+[node name="Lamp16" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 11.50, 2.75, -27.00)
+
+[node name="Lamp17" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -52.50, 2.75, 40.00)
+
+[node name="Lamp18" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 48.50, 2.75, -27.00)
+
+[node name="Lamp19" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 37.00, 2.75, -11.50)
+
+[node name="Lamp20" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12.50, 2.75, 8.00)
+
+[node name="Lamp21" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 16.50, 2.75, -43.00)
+
+[node name="Lamp22" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 25.50, 2.75, 14.00)
+
+[node name="Lamp23" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -22.00, 2.75, 2.50)
+
+[node name="Lamp24" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -5.00, 2.75, -35.50)
+
+[node name="Lamp25" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -49.00, 2.75, -1.50)
+
+[node name="Lamp26" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -7.00, 2.75, -20.50)
+
+[node name="Lamp27" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -43.00, 2.75, -30.50)
+
+[node name="Lamp28" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -7.00, 2.75, -7.50)
+
+[node name="Lamp29" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -14.50, 2.75, 40.00)
+
+[node name="Lamp30" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -9.50, 2.75, 27.00)
+
+[node name="Lamp31" type="Marker3D" parent="WallLamps"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -43.00, 2.75, 11.50)
 
 [node name="Camera3D" type="Camera3D" parent="." unique_id=1605738665]
 script = ExtResource("4_cam")

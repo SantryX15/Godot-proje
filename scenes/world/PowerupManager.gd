@@ -329,7 +329,7 @@ func _detonate_later(peer: int, team: int, pos: Vector3) -> void:
 		if not space.intersect_ray(q).is_empty():
 			continue
 		var dmg := BOMB_DAMAGE * lerpf(1.0, 0.35, d / BOMB_RADIUS)
-		pl.take_damage(dmg, peer)
+		pl.take_damage(dmg, peer, 1)  # Player.DAMAGE_EXPLOSION — çömelme bombadan korumaz
 
 
 func _player_rids() -> Array[RID]:

@@ -61,6 +61,14 @@ var _end_stats: Label
 var _chat: ChatBox
 var _crosshair: Control
 
+# Dayanıklılık çubukları
+var _sprint_bar: ProgressBar
+var _sprint_fill: StyleBoxFlat
+var _sprint_cap: Label
+var _crouch_bar: ProgressBar
+var _crouch_fill: StyleBoxFlat
+var _crouch_cap: Label
+
 # Güç envanteri
 var _powerups: Node = null
 var _item_slot: PanelContainer
@@ -115,6 +123,12 @@ func _process(delta: float) -> void:
 		_scoreboard_panel.visible = tab
 		if tab:
 			_refresh_scoreboard()
+
+	# Koşu / çömelme dayanıklılığı
+	if _local_player and is_instance_valid(_local_player) and _sprint_bar:
+		var p := _local_player
+		_update_stamina_meter(_sprint_bar, _sprint_fill, _sprint_cap, p.sprint_stamina, p.sprint_locked, p.move_mode == 0, UITheme.SUCCESS)
+		_update_stamina_meter(_crouch_bar, _crouch_fill, _crouch_cap, p.crouch_stamina, p.crouch_locked, p.move_mode == 2, Color(0.45, 0.75, 1.0))
 
 	# Hasar flaşı + düşük can vinyeti
 	_hit_flash = maxf(_hit_flash - delta * 2.5, 0.0)
@@ -327,7 +341,53 @@ func _setup_player_card() -> void:
 	_ammo_bar.add_theme_stylebox_override("background", UITheme.style(Color(1, 1, 1, 0.07), 3))
 	ammo_box.add_child(_ammo_bar)
 
+	# Dayanıklılık: koşu (Shift) + çömelme (Ctrl) — _process'te yerel oyuncudan okunur
+	var stamina_row := HBoxContainer.new()
+	stamina_row.add_theme_constant_override("separation", 18)
+	box.add_child(stamina_row)
+	var sprint := _make_stamina_meter("KOŞU  ·  SHIFT", UITheme.SUCCESS)
+	stamina_row.add_child(sprint[0])
+	_sprint_bar = sprint[1]
+	_sprint_fill = sprint[2]
+	_sprint_cap = sprint[3]
+	var crouch := _make_stamina_meter("ÇÖMELME  ·  CTRL", Color(0.45, 0.75, 1.0))
+	stamina_row.add_child(crouch[0])
+	_crouch_bar = crouch[1]
+	_crouch_fill = crouch[2]
+	_crouch_cap = crouch[3]
+
 	_ignore_mouse_recursive(card)
+
+
+## [kutu, çubuk, dolgu stili, başlık]
+func _make_stamina_meter(caption: String, color: Color) -> Array:
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 3)
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var cap := UITheme.label(caption, 9, UITheme.TEXT_DIM, UITheme.font_caps)
+	col.add_child(cap)
+	var bar := ProgressBar.new()
+	bar.show_percentage = false
+	bar.custom_minimum_size = Vector2(0, 4)
+	bar.max_value = 1.0
+	bar.value = 1.0
+	var fill := UITheme.style(color, 2)
+	bar.add_theme_stylebox_override("fill", fill)
+	bar.add_theme_stylebox_override("background", UITheme.style(Color(1, 1, 1, 0.07), 2))
+	col.add_child(bar)
+	return [col, bar, fill, cap]
+
+
+## Kilitli (tükenmiş, yenileniyor) çubuk kırmızı + yanıp söner; kullanılırken parlak
+func _update_stamina_meter(bar: ProgressBar, fill: StyleBoxFlat, cap: Label, value: float, locked: bool, active: bool, color: Color) -> void:
+	bar.value = value
+	if locked:
+		var blink := 0.55 + 0.45 * sin(Time.get_ticks_msec() / 120.0)
+		fill.bg_color = Color(UITheme.DANGER, blink)
+		cap.add_theme_color_override("font_color", UITheme.DANGER)
+	else:
+		fill.bg_color = color if active or value < 1.0 else Color(color, 0.55)
+		cap.add_theme_color_override("font_color", color if active else UITheme.TEXT_DIM)
 
 
 ## Tek slotluk güç envanteri — oyuncu kartının sağında. PowerupManager (Map'te kardeş node) sinyallerini dinler.
@@ -398,8 +458,8 @@ func _setup_chat() -> void:
 	_chat.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	_chat.offset_left = 16
 	_chat.offset_right = 416
-	_chat.offset_top = -360
-	_chat.offset_bottom = -150
+	_chat.offset_top = -390
+	_chat.offset_bottom = -180  # oyuncu kartı (dayanıklılık çubuklarıyla ~150 px) üstü
 	_chat.grow_vertical = Control.GROW_DIRECTION_BEGIN  # içerik büyürse yukarı uzasın, oyuncu kartına binmesin
 	_chat.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(_chat)

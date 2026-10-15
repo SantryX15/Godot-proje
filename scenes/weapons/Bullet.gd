@@ -49,6 +49,10 @@ func _on_body_entered(body: Node) -> void:
 			queue_free()
 			return
 
+		# Çömelmiş hedef: mermi üstünden geçer (yok olmaz, hasar yok). Host take_damage'de de kontrol eder.
+		if body.has_method("is_crouching") and body.is_crouching():
+			return
+
 		# Sadece atan oyuncunun clienti hasar bildirir — çift hasar önlenir
 		if NetworkManager.get_local_id() == shooter_peer_id:
 			if NetworkManager.is_host():
