@@ -63,6 +63,12 @@ func _ready() -> void:
 			var pm := PrismMesh.new()
 			pm.size = Vector3(0.45, 0.45, 0.45)
 			core.mesh = pm
+		4:  # flaş bombası — kısa silindir (sis/flaş el bombası)
+			var c := CylinderMesh.new()
+			c.top_radius = 0.14
+			c.bottom_radius = 0.14
+			c.height = 0.5
+			core.mesh = c
 		_:  # takım uydusu — halka
 			var t := TorusMesh.new()
 			t.inner_radius = 0.18

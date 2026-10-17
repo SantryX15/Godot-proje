@@ -255,8 +255,9 @@ Oyuncunun **tek slotluk** envanteri vardır; dolu slotla yeni güç alınamaz. �
 
 | Güç | Etki |
 |---|---|
-| Bomba | Nişan yönüne en fazla 12 m atılır, 4 m yarıçap, merkezde 75 → kenarda ~%35 hasar. Duvar arkası, dost ve atan etkilenmez. Çömelme korumaz. |
-| Sağlık | +60 can |
+| Bomba | Nişan yönüne en fazla 12 m atılır, 4 m yarıçap, merkezde 75 → kenarda ~%35 hasar. Duvar arkası, dost ve atan etkilenmez. Çömelme korumaz. Yakındakilerin ekranı mesafeye göre sarsılır (16 m'ye kadar). |
+| Flaş bombası | Bomba gibi atılır, hasarsız. 11 m içinde ve görüş hattındaki herkesi (atan ve takımı dahil) kör eder: ekran beyazlar, sonra söner. Flaşa bakan tam, sırtı dönük ~%35 etkilenir. |
+| Sağlık | +60 can, ekran kenarı yeşil parlar, karakter herkese yeşil parıldar |
 | Uydu | 8 sn minimapte **tüm oyuncular** görünür; kart ve kapı görünmez, ama kart birinin üzerindeyse taşıyıcı işaretlenir |
 | Takım uydusu | 6 sn sadece düşmanlar görünür |
 
@@ -337,7 +338,7 @@ Farklı iskelette retarget araçları uyarlanmalıdır. Detaylı teknik şartlar
 
 ## 14. Test ve hata ayıklama
 
-- **Test modu** (debug build'de otomatik açık): F1 Bomba, F2 Sağlık, F3 Uydu, F4 Takım uydusu verir; F5 önüne rastgele güç doğurur.
+- **Test modu** (debug build'de otomatik açık): F1 Bomba, F2 Sağlık, F3 Uydu, F4 Takım uydusu, F6 Flaş bombası verir; F5 önüne rastgele güç doğurur.
 - **Çoklu oyuncu testi:** Aynı makinede birden fazla Godot penceresi açılıp `localhost` / oda koduyla bağlanılabilir.
   Host migration 3 süreçle (host + 2 client) doğrulanmıştır.
 - Headless script testi: `Godot.exe --path . --script <script.gd>`.

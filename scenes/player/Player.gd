@@ -5,6 +5,7 @@ extends CharacterBody3D
 
 signal health_changed(new_health: float)
 signal ammo_changed(current: int, total: int, reloading: bool)
+signal healed(amount: float)  # sadece local — HUD yeşil vinyet
 
 @export var speed: float = 8.0
 @export var max_health: float = 100.0
@@ -124,6 +125,15 @@ var _target_aim_y: float = 0.0
 var _sync_timer: float = 0.0
 var _card_pickup_blocked: float = 0.0
 
+## Hasar/iyileşme parıltısı — her peer'da: karakter kırmızı (hasar) / yeşil (sağlık) parlar.
+## Işık sadece BODY_LIGHT_LAYER_BIT katmanına (karakter mesh'leri) değer, zemine taşmaz.
+const FX_HURT_COLOR := Color(1.0, 0.12, 0.08)
+const FX_HEAL_COLOR := Color(0.3, 1.0, 0.45)
+const FX_ENERGY := 7.0
+const FX_DECAY := 1.8               # 1/sn
+var _fx_light: OmniLight3D = null
+var _fx_level := 0.0
+
 
 func initialize(p_peer_id: int, p_team_id: int, p_character: String = "Visioner") -> void:
 	character_type = p_character
@@ -183,6 +193,14 @@ func initialize(p_peer_id: int, p_team_id: int, p_character: String = "Visioner"
 
 	# Body ışığı sadece yerel oyuncuda — uzak oyuncuların üzerinde hale olmasın
 	body_light.visible = is_local
+
+	if _fx_light == null:
+		_fx_light = OmniLight3D.new()
+		_fx_light.position = Vector3(0, 1.1, 0)
+		_fx_light.omni_range = 2.8
+		_fx_light.light_cull_mask = 1 << (BODY_LIGHT_LAYER_BIT - 1)
+		_fx_light.visible = false
+		add_child(_fx_light)
 
 	_target_position = global_position
 	_last_anim_pos = global_position
@@ -405,6 +423,23 @@ func play_action(action: int) -> void:
 # Fizik Döngüsü
 # ─────────────────────────────────────────────
 
+## Hasar/iyileşme parıltısını başlat (sadece görsel). strength 0..1
+func flash_fx(color: Color, strength: float) -> void:
+	if _fx_light == null:
+		return
+	_fx_level = maxf(_fx_level, clampf(strength, 0.0, 1.0))
+	_fx_light.light_color = color
+	_fx_light.visible = true
+
+
+func _process(delta: float) -> void:
+	if _fx_light == null or _fx_level <= 0.0:
+		return
+	_fx_level = maxf(_fx_level - delta * FX_DECAY, 0.0)
+	_fx_light.light_energy = FX_ENERGY * _fx_level * _fx_level
+	_fx_light.visible = _fx_level > 0.0
+
+
 func _physics_process(delta: float) -> void:
 	if is_dead:
 		return
@@ -570,9 +605,17 @@ func take_damage(amount: float, shooter_peer_id: int, source: int = DAMAGE_BULLE
 
 @rpc("any_peer", "call_local", "reliable")
 func _sync_health(new_health: float) -> void:
-	# Hasar aldı (ölmedi) → her peer'da sarsılma
-	if new_health < health and new_health > 0.0:
-		play_action(Action.HIT)
+	var diff := new_health - health
+	if diff < 0.0:
+		# Hasar → her peer'da kırmızı parıltı (hasara göre), ölmediyse sarsılma
+		flash_fx(FX_HURT_COLOR, 0.55 + (-diff) / 60.0)
+		if new_health > 0.0:
+			play_action(Action.HIT)
+	elif diff > 0.0:
+		# İyileşme (sağlık gücü) → yeşil parıltı; respawn bu yoldan geçmez (_apply_respawn)
+		flash_fx(FX_HEAL_COLOR, 1.0)
+		if is_local:
+			healed.emit(diff)
 	health = new_health
 	if is_local:
 		emit_signal("health_changed", health)

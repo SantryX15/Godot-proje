@@ -6,17 +6,20 @@
 ## Client'lar sadece istek yollar (request_pickup / request_use) ve görsel/HUD durumunu RPC ile alır.
 ##   _spawn_rpc / _despawn_rpc        → Powerup.gd nesneleri (tüm peer'lar)
 ##   _set_item_rpc(peer, type)        → envanter (herkese; HUD sadece kendini gösterir)
-##   _bomb_rpc(...)                   → Bomb.gd görseli (herkese), hasar host'ta _detonate'te
+##   _bomb_rpc(...)                   → Bomb.gd görseli (herkese; bomba + flaş), hasar host'ta _detonate'te
 ##   _reveal_rpc(team, kind, süre)    → uydu: o takımın minimapinde tüm oyuncular + kart taşıyıcı ("all_players") / düşmanlar ("enemies")
-## Sinyaller (HUD/Minimap dinler): inventory_changed(type), reveal_started(kind, dur, own_team), notice(text, color)
+## Patlama YEREL etkileri (_on_bomb_exploded, her peer kendi oyuncusu için): yakınlığa göre kamera sarsıntısı
+## (CameraController.add_trauma), flaşta görüş hattı + bakış yönüne göre körlük (flashed → HUD beyaz ekran).
+## Sinyaller (HUD/Minimap dinler): inventory_changed(type), reveal_started(kind, dur, own_team), notice(text, color), flashed(strength)
 
 extends Node
 
 signal inventory_changed(item_type: int)            # yerel oyuncunun slotu (-1 = boş)
 signal reveal_started(kind: String, duration: float, own_team: bool)
 signal notice(text: String, color: Color)
+signal flashed(strength: float)                     # yerel oyuncu flaşla kör oldu (0..1)
 
-enum Type { BOMB, HEAL, INTEL_SAT, ENEMY_SAT }
+enum Type { BOMB, HEAL, INTEL_SAT, ENEMY_SAT, FLASH }
 const NONE := -1
 
 ## Görünüm/isim (HUD, Powerup.gd, Minimap ortak kullanır)
@@ -25,8 +28,9 @@ const INFO := {
 	Type.HEAL:      {"name": "SAĞLIK",        "glyph": "✚", "color": Color(0.35, 0.95, 0.5),  "desc": "+%d can"},
 	Type.INTEL_SAT: {"name": "UYDU",          "glyph": "◈", "color": Color(0.3, 0.85, 1.0),   "desc": "Tüm oyuncular + kart taşıyıcı haritada"},
 	Type.ENEMY_SAT: {"name": "TAKIM UYDUSU",  "glyph": "◉", "color": Color(0.8, 0.45, 1.0),   "desc": "Düşmanlar haritada"},
+	Type.FLASH:     {"name": "FLAŞ BOMBASI",  "glyph": "✦", "color": Color(0.85, 0.93, 1.0),  "desc": "Fareye fırlat, görenleri kör eder"},
 }
-const WEIGHTS := {Type.BOMB: 30, Type.HEAL: 30, Type.INTEL_SAT: 20, Type.ENEMY_SAT: 20}
+const WEIGHTS := {Type.BOMB: 25, Type.HEAL: 25, Type.FLASH: 20, Type.INTEL_SAT: 15, Type.ENEMY_SAT: 15}
 
 ## Zamanlama (sn)
 const FIRST_SPAWN_DELAY := 12.0
@@ -41,6 +45,9 @@ const BOMB_RADIUS := 4.0
 const BOMB_MAX_THROW := 12.0
 const BOMB_FLIGHT := 0.55
 const BOMB_FUSE := 1.2             # yere düştükten sonra
+const BOMB_SHAKE_RANGE := 16.0     # bu mesafenin ötesinde sarsıntı yok
+const FLASH_FUSE := 0.8
+const FLASH_RADIUS := 11.0         # görüş hattı varsa bu mesafeye kadar kör eder (atan + takımı dahil!)
 const INTEL_DURATION := 8.0
 const ENEMY_SAT_DURATION := 6.0
 
@@ -125,11 +132,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 # ─────────────────────────────────────────────
 #  TEST MODU (sadece debug build — editörden çalıştırınca; dışa aktarılmış oyunda kapalı)
-#  F1 bomba · F2 sağlık · F3 uydu · F4 takım uydusu → doğrudan envantere (slot doluysa değiştirir)
+#  F1 bomba · F2 sağlık · F3 uydu · F4 takım uydusu · F6 flaş → doğrudan envantere (slot doluysa değiştirir)
 #  F5 → önüne rastgele bir güç doğur (yerden almayı denemek için)
 # ─────────────────────────────────────────────
 
-const TEST_KEYS := {KEY_F1: Type.BOMB, KEY_F2: Type.HEAL, KEY_F3: Type.INTEL_SAT, KEY_F4: Type.ENEMY_SAT}
+const TEST_KEYS := {KEY_F1: Type.BOMB, KEY_F2: Type.HEAL, KEY_F3: Type.INTEL_SAT, KEY_F4: Type.ENEMY_SAT, KEY_F6: Type.FLASH}
 
 
 func _handle_test_key(code: Key) -> bool:
@@ -336,7 +343,9 @@ func _request_use(aim: Vector3) -> void:
 			player.health = minf(player.health + HEAL_AMOUNT, player.max_health)
 			player._sync_health.rpc(player.health)
 		Type.BOMB:
-			_throw_bomb(peer, team, player as Node3D, aim)
+			_throw_bomb(peer, team, player as Node3D, aim, false)
+		Type.FLASH:
+			_throw_bomb(peer, team, player as Node3D, aim, true)
 		Type.INTEL_SAT:
 			# Tüm oyuncular + kart taşıyıcı (kart/kapı konumu GÖSTERİLMEZ) — Minimap._draw_satellite_reveals
 			_reveal_rpc.rpc(team, "all_players", INTEL_DURATION, peer)
@@ -344,7 +353,7 @@ func _request_use(aim: Vector3) -> void:
 			_reveal_rpc.rpc(team, "enemies", ENEMY_SAT_DURATION, peer)
 
 
-func _throw_bomb(peer: int, team: int, player: Node3D, aim: Vector3) -> void:
+func _throw_bomb(peer: int, team: int, player: Node3D, aim: Vector3, flash: bool) -> void:
 	var from := player.global_position + Vector3(0, 1.2, 0)
 	var flat := Vector3(aim.x - from.x, 0.0, aim.z - from.z)
 	if flat.length() > BOMB_MAX_THROW:
@@ -360,8 +369,9 @@ func _throw_bomb(peer: int, team: int, player: Node3D, aim: Vector3) -> void:
 		target = Vector3(back.x, 0.15, back.z)
 	var id := _next_id
 	_next_id += 1
-	_bomb_rpc.rpc(id, from, target, team, peer)
-	_detonate_later(peer, team, target)
+	_bomb_rpc.rpc(id, from, target, team, peer, flash)
+	if not flash:
+		_detonate_later(peer, team, target)  # flaş hasarsız — körlük her peer'da yerel (_on_bomb_exploded)
 
 
 func _detonate_later(peer: int, team: int, pos: Vector3) -> void:
@@ -398,14 +408,53 @@ func _player_rids() -> Array[RID]:
 
 
 @rpc("authority", "call_local", "reliable")
-func _bomb_rpc(_id: int, from: Vector3, target: Vector3, team: int, thrower: int = -1) -> void:
+func _bomb_rpc(_id: int, from: Vector3, target: Vector3, team: int, thrower: int = -1, flash: bool = false) -> void:
 	# Fırlatanın el bombası atma animasyonu (her peer'da)
 	var pl: Variant = GameManager.active_players.get(thrower)
 	if pl != null and is_instance_valid(pl) and pl.has_method("play_action"):
 		pl.play_action(1)  # Player.Action.TOSS
 	var bomb: Node3D = BOMB_SCRIPT.new()
-	bomb.setup(from, target, BOMB_FLIGHT, BOMB_FUSE, BOMB_RADIUS, TeamManager.get_color(team))
+	bomb.is_flash = flash
+	bomb.setup(from, target, BOMB_FLIGHT, FLASH_FUSE if flash else BOMB_FUSE, BOMB_RADIUS, TeamManager.get_color(team))
+	bomb.exploded.connect(_on_bomb_exploded)
 	get_parent().add_child(bomb)
+
+
+## Patlamanın yerel oyuncuya etkisi (her peer kendisi için, sadece görsel):
+##  bomba → yakınlığa göre ekran sarsıntısı (hasar/kırmızılık host'tan _sync_health ile gelir)
+##  flaş  → görüş hattı varsa mesafe + bakış yönüne göre körlük (flashed sinyali → HUD), hafif sarsıntı
+func _on_bomb_exploded(pos: Vector3, flash: bool) -> void:
+	var me := _local_player()
+	if me == null or me.is_dead:
+		return
+	var my_pos := (me as Node3D).global_position
+	var d := Vector2(my_pos.x - pos.x, my_pos.z - pos.z).length()
+	var cam := get_viewport().get_camera_3d()
+	if not flash:
+		var shake := clampf(1.0 - d / BOMB_SHAKE_RANGE, 0.0, 1.0)
+		if d < BOMB_RADIUS:
+			shake = maxf(shake, 0.9)
+		if shake > 0.0 and cam and cam.has_method("add_trauma"):
+			cam.add_trauma(shake * 0.85)
+		return
+
+	if cam and cam.has_method("add_trauma"):
+		cam.add_trauma(clampf(1.0 - d / FLASH_RADIUS, 0.0, 1.0) * 0.3)
+	if d > FLASH_RADIUS:
+		return
+	# Duvar arkasındaysa etkilenmez
+	var eye := my_pos + Vector3(0, 1.5, 0)
+	var src := pos + Vector3(0, 0.5, 0)
+	var q := PhysicsRayQueryParameters3D.create(src, eye)
+	q.exclude = _player_rids()
+	if not (me as Node3D).get_world_3d().direct_space_state.intersect_ray(q).is_empty():
+		return
+	# Flaşa bakıyorsan tam, sırtın dönükse ~%35
+	var fwd := -(me as Node3D).global_transform.basis.z
+	var to_flash := Vector3(pos.x - my_pos.x, 0, pos.z - my_pos.z)
+	var facing := 1.0 if to_flash.length() < 0.5 else (Vector3(fwd.x, 0, fwd.z).normalized().dot(to_flash.normalized()) + 1.0) * 0.5
+	var strength := pow(1.0 - d / FLASH_RADIUS, 0.6) * lerpf(0.35, 1.0, facing)
+	flashed.emit(strength)
 
 
 @rpc("authority", "call_local", "reliable")

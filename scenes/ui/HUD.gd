@@ -46,6 +46,12 @@ var _last_health := -1.0
 # Katmanlar
 var _vignette: TextureRect
 var _hit_flash := 0.0
+var _heal_vignette: TextureRect
+var _heal_flash := 0.0
+var _blind_rect: ColorRect
+var _blind_alpha := 0.0
+var _blind_hold := 0.0
+var _blind_fade := 1.0
 var _death_overlay: Control
 var _death_count: Label
 var _death_killer: Label
@@ -102,6 +108,7 @@ func _ready() -> void:
 	_setup_scoreboard()
 	_crosshair = preload("res://scenes/ui/Crosshair.gd").new()
 	_root.add_child(_crosshair)  # menülerin altında kalsın — menü açıkken zaten gizlenir
+	_setup_blind_overlay()       # flaş körlüğü HUD'ı da kapatır, menüleri değil
 	_setup_pause_menu()
 	_setup_end_overlay()
 
@@ -138,6 +145,17 @@ func _process(delta: float) -> void:
 		if ratio < 0.35:
 			low = (0.35 - ratio) / 0.35 * (0.75 + 0.25 * sin(Time.get_ticks_msec() / 180.0))
 	_vignette.modulate.a = clampf(maxf(low, _hit_flash), 0.0, 1.0)
+	# Sağlık gücü → yeşil vinyet
+	_heal_flash = maxf(_heal_flash - delta * 1.2, 0.0)
+	_heal_vignette.modulate.a = _heal_flash
+
+	# Flaş körlüğü: tam beyaz bekler, sonra söner
+	if _blind_hold > 0.0:
+		_blind_hold -= delta
+	elif _blind_alpha > 0.0:
+		_blind_alpha = maxf(_blind_alpha - delta * _blind_fade, 0.0)
+	_blind_rect.color.a = _blind_alpha
+	_blind_rect.visible = _blind_alpha > 0.0
 
 	# Ölüm ekranı + geri sayım
 	var dead: bool = _local_player != null and is_instance_valid(_local_player) and _local_player.is_dead
@@ -171,23 +189,46 @@ func _unhandled_key_input(event: InputEvent) -> void:
 # ─────────────────────────────────────────────
 
 func _setup_vignette() -> void:
+	_vignette = _make_vignette(UITheme.DANGER, 0.55)                # hasar / düşük can
+	_heal_vignette = _make_vignette(Color(0.3, 1.0, 0.45), 0.42)    # sağlık gücü
+
+
+func _make_vignette(color: Color, edge_alpha: float) -> TextureRect:
 	var grad := Gradient.new()
-	grad.set_color(0, Color(UITheme.DANGER, 0.0))
-	grad.set_color(1, Color(UITheme.DANGER, 0.55))
-	grad.add_point(0.55, Color(UITheme.DANGER, 0.0))
+	grad.set_color(0, Color(color, 0.0))
+	grad.set_color(1, Color(color, edge_alpha))
+	grad.add_point(0.55, Color(color, 0.0))
 	var tex := GradientTexture2D.new()
 	tex.gradient = grad
 	tex.fill = GradientTexture2D.FILL_RADIAL
 	tex.fill_from = Vector2(0.5, 0.5)
 	tex.fill_to = Vector2(1.0, 1.0)
-	_vignette = TextureRect.new()
-	_vignette.texture = tex
-	_vignette.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_vignette.stretch_mode = TextureRect.STRETCH_SCALE
-	_vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_vignette.modulate.a = 0.0
-	_root.add_child(_vignette)
+	var v := TextureRect.new()
+	v.texture = tex
+	v.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	v.stretch_mode = TextureRect.STRETCH_SCALE
+	v.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.modulate.a = 0.0
+	_root.add_child(v)
+	return v
+
+
+## Flaş bombası körlüğü — PowerupManager.flashed(strength)
+func _setup_blind_overlay() -> void:
+	_blind_rect = ColorRect.new()
+	_blind_rect.color = Color(0.97, 0.98, 1.0, 0.0)
+	_blind_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_blind_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_blind_rect.visible = false
+	_root.add_child(_blind_rect)
+
+
+func _on_flashed(strength: float) -> void:
+	# Tam etki: ~2.3 s bembeyaz + ~2.5 s sönme; uzak/sırtı dönük: kısa ve yarı saydam
+	_blind_alpha = maxf(_blind_alpha, clampf(strength * 1.25, 0.0, 1.0))
+	_blind_hold = maxf(_blind_hold, 0.3 + 2.0 * strength)
+	_blind_fade = 1.0 / (0.8 + 1.7 * strength)
 
 
 func _setup_scores() -> void:
@@ -426,6 +467,7 @@ func _setup_item_slot() -> void:
 	if _powerups:
 		_powerups.inventory_changed.connect(_on_item_changed)
 		_powerups.notice.connect(_show_banner)
+		_powerups.flashed.connect(_on_flashed)
 		if _powerups.TEST_MODE:
 			_setup_test_hint()
 	_on_item_changed(-1)
@@ -441,7 +483,7 @@ func _setup_test_hint() -> void:
 	box.add_theme_constant_override("separation", 2)
 	chip.add_child(box)
 	box.add_child(UITheme.label("TEST MODU", 9, UITheme.ACCENT, UITheme.font_caps))
-	for line: String in ["F1 Bomba   F2 Sağlık", "F3 Uydu   F4 Takım uydusu", "F5 Önüne güç doğur   Q Kullan"]:
+	for line: String in ["F1 Bomba   F2 Sağlık", "F3 Uydu   F4 Takım uydusu", "F6 Flaş bombası", "F5 Önüne güç doğur   Q Kullan"]:
 		box.add_child(UITheme.label(line, 11, UITheme.TEXT_DIM))
 	_ignore_mouse_recursive(chip)
 
@@ -696,6 +738,7 @@ func _on_local_player_spawned(player: Node) -> void:
 	_local_player = player
 	player.health_changed.connect(_on_health_changed)
 	player.ammo_changed.connect(_on_ammo_changed)
+	player.healed.connect(_on_healed)
 	_health_bar.max_value = player.max_health
 	_hp_max.text = "/%d" % int(player.max_health)
 	_last_health = player.health
@@ -715,7 +758,8 @@ func _on_local_player_spawned(player: Node) -> void:
 
 func _on_health_changed(new_health: float) -> void:
 	if _last_health >= 0.0 and new_health < _last_health:
-		_hit_flash = 0.6
+		# Hasar büyüdükçe kırmızı güçlenir (mermi ~0.5, yakın bomba 1.0)
+		_hit_flash = maxf(_hit_flash, clampf(0.4 + (_last_health - new_health) / 50.0, 0.4, 1.0))
 	_last_health = new_health
 	_health_bar.value = new_health
 	_hp_value.text = "%d" % int(new_health)
@@ -723,6 +767,14 @@ func _on_health_changed(new_health: float) -> void:
 	var col := UITheme.SUCCESS if t > 0.6 else (UITheme.ACCENT if t > 0.3 else UITheme.DANGER)
 	_hp_fill.bg_color = col
 	_hp_value.add_theme_color_override("font_color", UITheme.TEXT if t > 0.3 else UITheme.DANGER)
+
+
+func _on_healed(amount: float) -> void:
+	_heal_flash = 1.0
+	_hit_flash = 0.0  # kırmızı flaş yeşili bastırmasın
+	_show_banner("✚ +%d CAN" % int(amount), Color(0.35, 0.95, 0.5))
+	_hp_value.modulate = Color(0.6, 1.8, 0.8)
+	create_tween().tween_property(_hp_value, "modulate", Color.WHITE, 0.8)
 
 
 func _on_ammo_changed(current: int, total: int, reloading: bool) -> void:

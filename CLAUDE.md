@@ -226,7 +226,12 @@ gereksiz kılıyor), rifle run/walking (UE Walk/Run bacakları + AimIdle üst g�
 - **`PowerupManager.gd`** (Map.tscn → `PowerupManager` Node; RPC'ler bu node path'iyle, tüm peer'larda aynı):
   host `_process` → `SPAWN_INTERVAL` (8-15s) aralıkla `PowerupPoints/Point*` (33 köşe, `tools/maze_corners.py`)
   üzerinde `_spawn_rpc(id, type, pos, lifetime 5-10s)`, `MAX_ACTIVE=3`, ömür dolunca `_despawn_rpc`.
-  Tipler `Type {BOMB, HEAL, INTEL_SAT, ENEMY_SAT}`, görünüm/isim `INFO` (HUD/Minimap/Powerup ortak).
+  Tipler `Type {BOMB, HEAL, INTEL_SAT, ENEMY_SAT, FLASH}` (index sabit — Powerup.gd/Minimap sayıyla kullanır), görünüm/isim `INFO` (HUD/Minimap/Powerup ortak).
+  **FLASH** bomba gibi atılır (`_throw_bomb(..., flash=true)`, `_bomb_rpc(..., flash)`), hasarsız. Patlama etkileri YEREL:
+  `Bomb.exploded(pos, is_flash)` → `_on_bomb_exploded`: bomba → yakınlığa göre `CameraController.add_trauma()` (BOMB_SHAKE_RANGE 16 m);
+  flaş → FLASH_RADIUS 11 m + duvar ışını + bakış yönü (sırtı dönük ~%35) → `flashed(strength)` → HUD `_blind_rect` beyaz ekran.
+  Flaş atanı ve takımını da kör eder. Hasar/iyileşme görseli: `Player._sync_health` farkı → `flash_fx()` (her peer'da karakter
+  kırmızı/yeşil parlar, `_fx_light` layer 20) + local `healed(amount)` → HUD yeşil vinyet; HUD kırmızı vinyet hasar miktarıyla ölçeklenir.
   Alma: `Powerup.gd` yerel oyuncu ≤1.3 m + slot boşsa `local_touched` → `_request_pickup` (host: mesafe/ölü/slot
   kontrolü) → `_set_item_rpc(peer, type)` (herkese; `inventory` peer→type, tek slot). Ölünce `kill_happened` → slot boşalır.
   Kullanma: `Q` (`_unhandled_key_input`, sohbette değilken) → `_request_use(aim)` host:
@@ -236,7 +241,7 @@ gereksiz kılıyor), rifle run/walking (UE Walk/Run bacakları + AimIdle üst g�
   üzerindeyse o taşıyıcı sarı elmas+halka ile işaretlenir. ENEMY_SAT → `"enemies"` 6 s (sadece düşmanlar).
   `reveal_until` o takımda; diğer takımlara "konumunuz tespit edildi" uyarısı.
   **TEST MODU** (`TEST_MODE = OS.is_debug_build()` — editörden çalıştırınca açık, export'ta kapalı; host da debug olmalı):
-  F1 Bomba / F2 Sağlık / F3 Uydu / F4 Takım uydusu → `_request_test_give` (slotu değiştirir), F5 → `_request_test_spawn`
+  F1 Bomba / F2 Sağlık / F3 Uydu / F4 Takım uydusu / F6 Flaş → `_request_test_give` (slotu değiştirir), F5 → `_request_test_spawn`
   (önüne rastgele güç, 15 s ömür). HUD skor panelinin altında tuş hatırlatıcısı (`_setup_test_hint`). Sinyaller: `inventory_changed`, `reveal_started`, `notice` (HUD banner).
   Geç katılan client 1.5 s sonra `_request_sync`. HUD envanter slotu oyuncu kartının sağında.
 - **`WallLamps.gd`** (Map.tscn → `WallLamps` Node3D, çocukları `Lamp*` Marker3D — `tools/maze_lamps.py` üretir,
