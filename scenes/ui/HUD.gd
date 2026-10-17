@@ -426,7 +426,24 @@ func _setup_item_slot() -> void:
 	if _powerups:
 		_powerups.inventory_changed.connect(_on_item_changed)
 		_powerups.notice.connect(_show_banner)
+		if _powerups.TEST_MODE:
+			_setup_test_hint()
 	_on_item_changed(-1)
+
+
+## Test modu (debug build) tuş hatırlatıcısı — skor panelinin altında
+func _setup_test_hint() -> void:
+	var chip := PanelContainer.new()
+	chip.position = Vector2(16, 186)
+	chip.add_theme_stylebox_override("panel", UITheme.style(Color(UITheme.BG, 0.8), 10, Color(UITheme.ACCENT, 0.5), 1, 10, 6))
+	_root.add_child(chip)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 2)
+	chip.add_child(box)
+	box.add_child(UITheme.label("TEST MODU", 9, UITheme.ACCENT, UITheme.font_caps))
+	for line: String in ["F1 Bomba   F2 Sağlık", "F3 Uydu   F4 Takım uydusu", "F5 Önüne güç doğur   Q Kullan"]:
+		box.add_child(UITheme.label(line, 11, UITheme.TEXT_DIM))
+	_ignore_mouse_recursive(chip)
 
 
 func _on_item_changed(item_type: int) -> void:

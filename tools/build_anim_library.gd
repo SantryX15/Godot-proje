@@ -19,6 +19,17 @@ const CLIPS := {
 	"Jump.FBX": ["Jump", false],
 	"Death.fbx": ["Death", false],
 }
+## Mixamo (mixamorig iskeleti) klipleri → retarget_lib ile UE iskeletine aktarılır. [ad, döngü]
+## Üst gövde katmanı (UpperBodyLayer) kullanır: AimIdle/FireStand/FireWalk/Reload/Toss/HitReact; Dying tam gövde.
+const MIXAMO_CLIPS := {
+	"res://anims/Basic Shooter Pack/rifle aiming idle.fbx": ["AimIdle", true],
+	"res://anims/NotWalkFire.fbx": ["FireStand", true],
+	"res://anims/WalkFiring Rifle.fbx": ["FireWalk", true],
+	"res://anims/Reloading.fbx": ["Reload", false],
+	"res://anims/Basic Shooter Pack/toss grenade.fbx": ["Toss", false],
+	"res://anims/Basic Shooter Pack/hit reaction.fbx": ["HitReact", false],
+	"res://anims/Dying.fbx": ["Dying", false],
+}
 
 
 func _initialize() -> void:
@@ -65,6 +76,17 @@ func _run() -> void:
 		lib.add_animation(StringName(CLIPS[file][0]), anim)
 		print("%-16s → %-10s len=%.2f tracks=%d (atılan %d)" % [file, CLIPS[file][0], anim.length, anim.get_track_count(), removed])
 		src.free()
+
+	# Mixamo klipleri (tools/.gdignore yüzünden res:// değil, script'in disk yolundan yüklenir)
+	var retarget: Script = load(get_script().resource_path.get_base_dir().path_join("retarget_lib.gd"))
+	for path: String in MIXAMO_CLIPS:
+		if not ResourceLoader.exists(path):
+			print("YOK: ", path)
+			continue
+		var anim: Animation = retarget.retarget(path, get_root(), model)
+		anim.loop_mode = Animation.LOOP_LINEAR if MIXAMO_CLIPS[path][1] else Animation.LOOP_NONE
+		lib.add_animation(StringName(MIXAMO_CLIPS[path][0]), anim)
+		print("%-34s → %-10s len=%.2f tracks=%d (Mixamo → UE)" % [path.get_file(), MIXAMO_CLIPS[path][0], anim.length, anim.get_track_count()])
 
 	var err := ResourceSaver.save(lib, OUT)
 	print("kaydedildi ", OUT, " err=", err, " animasyonlar=", lib.get_animation_list())

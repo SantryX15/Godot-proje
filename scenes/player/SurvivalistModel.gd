@@ -16,6 +16,9 @@ extends Node3D
 const ANIM_LIBRARY := preload("res://anims/survivalist_anims.res")
 const IDLE_NAME := &"Idle"
 const FALLBACK_IDLE := &"Breathing Idle"
+const CROUCH_IDLE_NAME := &"CrouchIdle"
+const CROUCH_IDLE_FRAME := 0.0   # CrouchWalk'ın bu anı (ayaklar bir arada, toplu çömelme)
+static var _crouch_idle_cache: Animation = null
 const TEX := "res://asset model/Survivalist_Textures/Textures/"
 
 ## Her zaman gizli: 1. şahıs (FPS) kolları
@@ -96,6 +99,33 @@ func _ready() -> void:
 	_apply_default_outfit.call_deferred()
 
 
+## CrouchWalk'ın tek karesinden 1 sn'lik durağan döngü üretir (tüm oyuncular paylaşır).
+## Ayrı klip gerekli: speed_scale=0 ile dondurmak AnimationPlayer geçişini de durduruyordu.
+static func _get_crouch_idle(src: Animation) -> Animation:
+	if _crouch_idle_cache:
+		return _crouch_idle_cache
+	var a := Animation.new()
+	a.length = 1.0
+	a.loop_mode = Animation.LOOP_LINEAR
+	var t0 := clampf(CROUCH_IDLE_FRAME, 0.0, src.length)
+	for i in src.get_track_count():
+		var type := src.track_get_type(i)
+		if type != Animation.TYPE_ROTATION_3D and type != Animation.TYPE_POSITION_3D:
+			continue
+		var t := a.add_track(type)
+		a.track_set_path(t, src.track_get_path(i))
+		if type == Animation.TYPE_ROTATION_3D:
+			var q := src.rotation_track_interpolate(i, t0)
+			a.rotation_track_insert_key(t, 0.0, q)
+			a.rotation_track_insert_key(t, 1.0, q)
+		else:
+			var p := src.position_track_interpolate(i, t0)
+			a.position_track_insert_key(t, 0.0, p)
+			a.position_track_insert_key(t, 1.0, p)
+	_crouch_idle_cache = a
+	return a
+
+
 func _apply_default_outfit() -> void:
 	if not _outfit_applied:
 		apply_outfit(DEFAULT_OUTFIT)
@@ -148,9 +178,11 @@ func _setup_idle() -> void:
 	for anim_name: StringName in ANIM_LIBRARY.get_animation_list():
 		if not lib.has_animation(anim_name):
 			lib.add_animation(anim_name, ANIM_LIBRARY.get_animation(anim_name))
+	# Olduğu yerde çömelme pozu: CrouchWalk'ın ayakların bir arada olduğu karesinden durağan döngü
+	if not lib.has_animation(CROUCH_IDLE_NAME) and lib.has_animation(&"CrouchWalk"):
+		lib.add_animation(CROUCH_IDLE_NAME, _get_crouch_idle(lib.get_animation(&"CrouchWalk")))
 	var idle := IDLE_NAME if lib.has_animation(IDLE_NAME) else FALLBACK_IDLE
-	player.autoplay = idle
-	player.play(idle)
+	player.play(idle)  # (autoplay ağaca eklendikten sonra etkisiz — doğrudan oynat)
 
 
 static func _get_material(key: String, skin: int) -> StandardMaterial3D:

@@ -2,7 +2,8 @@
 ## Giriş ekranı: solda oyun kimliği + oyuncu adı, sağda sekmeli panel
 ## (Odalar / Oda Kur / Kod ile Katıl) ve şifreli odalar için modal.
 ## UI tamamen kodla kurulur; görünüm UITheme autoload'undaki temadan gelir.
-## Arka plan MenuBackdrop.gdshader: fareyi takip eden el feneri + taktik ızgara.
+## Arka plan MenuBackground3D: taktik ızgara zeminde fenerli askerler devriye gezer + fareyi takip eden fener
+## (üstünde MenuOverlay.gdshader vinyeti).
 
 extends Control
 
@@ -10,8 +11,9 @@ const SETTINGS_PATH := "user://settings.cfg"
 const NAME_MAX_LEN := 16
 const CALLSIGNS: Array[String] = ["Kurt", "Gölge", "Baykuş", "Şahin", "Kobra", "Tilki", "Atmaca", "Hayalet", "Puma", "Akrep"]
 
-var _backdrop_mat: ShaderMaterial
-var _light_pos := Vector2.ZERO
+const MENU_BACKGROUND := preload("res://scenes/ui/MenuBackground3D.gd")
+const MENU_OVERLAY := preload("res://scenes/ui/MenuOverlay.gdshader")
+var _background: Node = null
 
 var _name_input: LineEdit
 var _status_lbl: Label
@@ -54,15 +56,10 @@ func _ready() -> void:
 
 	_build_ui()
 	_name_input.text = _load_name()
-	_light_pos = get_viewport_rect().size * Vector2(0.3, 0.4)
 	_show_tab("browse")
 
 
-func _process(delta: float) -> void:
-	# El feneri fareyi yumuşakça takip eder
-	_light_pos = _light_pos.lerp(get_local_mouse_position(), 1.0 - exp(-5.0 * delta))
-	_backdrop_mat.set_shader_parameter("light_pos", _light_pos)
-	_backdrop_mat.set_shader_parameter("rect_size", size)
+func _process(_delta: float) -> void:
 	# "Taranıyor" göstergesi nabız gibi yanıp söner
 	if _scan_dot and _current_tab == "browse":
 		_scan_dot.modulate.a = 0.35 + 0.65 * (0.5 + 0.5 * sin(Time.get_ticks_msec() / 260.0))
@@ -79,13 +76,16 @@ func _unhandled_input(event: InputEvent) -> void:
 # ─────────────────────────────────────────────
 
 func _build_ui() -> void:
-	var backdrop := ColorRect.new()
-	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
-	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_backdrop_mat = ShaderMaterial.new()
-	_backdrop_mat.shader = preload("res://scenes/ui/MenuBackdrop.gdshader")
-	backdrop.material = _backdrop_mat
-	add_child(backdrop)
+	# 3D arka plan: ızgara zeminde fenerli askerler devriye gezer + fareyi takip eden fener
+	_background = MENU_BACKGROUND.new()
+	add_child(_background)
+	var overlay := ColorRect.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var om := ShaderMaterial.new()
+	om.shader = MENU_OVERLAY
+	overlay.material = om
+	add_child(overlay)
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -110,7 +110,7 @@ func _build_brand_column() -> Control:
 	col.custom_minimum_size = Vector2(360, 0)
 	col.add_theme_constant_override("separation", 0)
 
-	var eyebrow := UITheme.label("5v5v5v5  ·  TAKTİK NİŞANCI", 11, UITheme.TEXT_DIM, UITheme.font_caps)
+	var eyebrow := UITheme.label("4 TAKIM  ·  2v2 – 5v5  ·  TAKTİK NİŞANCI", 11, UITheme.TEXT_DIM, UITheme.font_caps)
 	col.add_child(eyebrow)
 	col.add_child(_spacer(10))
 
@@ -449,7 +449,12 @@ func _build_room_row(code: String, room: Dictionary) -> Control:
 	var room_ip: String = room.get("ip", "")
 	var count: int = room.get("player_count", 0)
 	var room_name: String = room.get("room_name", code)
-	var full := count >= NetworkManager.MAX_PLAYERS
+	# Oda özellikleri (RoomManager broadcast — eski sürüm host'larda alanlar yoksa varsayılan)
+	var team_size: int = int(room.get("team_size", NetworkManager.TEAM_SIZE_MAX))
+	var max_players: int = int(room.get("max_players", NetworkManager.MAX_PLAYERS))
+	var map_name: String = room.get("map_name", "Labirent")
+	var in_game: bool = room.get("state", "lobby") == "game"
+	var full := count >= max_players
 
 	var row := PanelContainer.new()
 	row.add_theme_stylebox_override("panel", UITheme.style(UITheme.SURFACE_2, 12, UITheme.BORDER, 1, 16, 12))
@@ -481,6 +486,13 @@ func _build_room_row(code: String, room: Dictionary) -> Control:
 	if has_pw:
 		sub += "  ·  ŞİFRELİ"
 	info.add_child(UITheme.label(sub, 10, UITheme.TEXT_DIM, UITheme.font_caps))
+	# Özellik çipleri: durum · format · harita
+	var chips := HBoxContainer.new()
+	chips.add_theme_constant_override("separation", 6)
+	info.add_child(chips)
+	chips.add_child(_room_chip("● OYUNDA" if in_game else "● BEKLEMEDE", UITheme.DANGER if in_game else UITheme.SUCCESS))
+	chips.add_child(_room_chip(NetworkManager.get_format_text(team_size), UITheme.ACCENT))
+	chips.add_child(_room_chip(map_name.to_upper(), UITheme.TEXT_DIM))
 
 	# Doluluk
 	var cap_box := VBoxContainer.new()
@@ -488,22 +500,24 @@ func _build_room_row(code: String, room: Dictionary) -> Control:
 	cap_box.custom_minimum_size = Vector2(80, 0)
 	cap_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	h.add_child(cap_box)
-	var cap_lbl := UITheme.label("%d / %d" % [count, NetworkManager.MAX_PLAYERS], 13,
+	var cap_lbl := UITheme.label("%d / %d" % [count, max_players], 13,
 		UITheme.DANGER if full else UITheme.TEXT, UITheme.font_bold)
 	cap_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	cap_box.add_child(cap_lbl)
 	var cap_bar := ProgressBar.new()
 	cap_bar.show_percentage = false
 	cap_bar.custom_minimum_size = Vector2(0, 4)
-	cap_bar.max_value = NetworkManager.MAX_PLAYERS
+	cap_bar.max_value = max_players
 	cap_bar.value = count
 	if full:
 		cap_bar.add_theme_stylebox_override("fill", UITheme.style(UITheme.DANGER, 4))
 	cap_box.add_child(cap_bar)
 
 	var btn := Button.new()
-	btn.text = "DOLU" if full else "KATIL"
-	btn.disabled = full
+	# Oyun sürerken katılım yok (host da reddeder) — bitince tekrar denenebilir
+	btn.text = "OYUNDA" if in_game else ("DOLU" if full else "KATIL")
+	btn.disabled = full or in_game
+	btn.tooltip_text = "Oyun devam ediyor — bitince katılabilirsin" if in_game else ""
 	btn.theme_type_variation = "PrimaryButton"
 	btn.custom_minimum_size = Vector2(96, 40)
 	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -516,6 +530,13 @@ func _build_room_row(code: String, room: Dictionary) -> Control:
 # ─────────────────────────────────────────────
 #  Küçük yardımcılar
 # ─────────────────────────────────────────────
+
+func _room_chip(text: String, color: Color) -> Control:
+	var chip := PanelContainer.new()
+	chip.add_theme_stylebox_override("panel", UITheme.style(Color(color, 0.12), 6, Color.TRANSPARENT, 0, 7, 1))
+	chip.add_child(UITheme.label(text, 9, color, UITheme.font_caps))
+	return chip
+
 
 func _spacer(h: float) -> Control:
 	var c := Control.new()

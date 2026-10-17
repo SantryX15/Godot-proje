@@ -33,6 +33,8 @@ var player_stats: Dictionary = {}
 ## Migration: restore sırasında kullanılacak geçici pozisyonlar
 var _pending_card_pos: Vector3 = Vector3.ZERO
 var _pending_door_pos: Vector3 = Vector3.ZERO
+var _pending_positions: Dictionary = {}  # oyuncu adı → son konum (migration)
+var _migrated_stats: Dictionary = {}     # oyuncu adı → {kills, deaths} (migration)
 
 
 func _ready() -> void:
@@ -82,7 +84,7 @@ func check_all_characters_selected() -> void:
 @rpc("authority", "call_local", "reliable")
 func _begin_actual_game_rpc() -> void:
 	state = State.IN_GAME
-	get_tree().change_scene_to_packed(map_scene)
+	get_tree().change_scene_to_packed(_get_map_scene())
 	await get_tree().process_frame
 	await get_tree().process_frame
 	_spawn_local_player()
@@ -91,11 +93,26 @@ func _begin_actual_game_rpc() -> void:
 	emit_signal("game_started")
 
 
+## Oda ayarlarında seçili harita (NetworkManager.MAPS) — yüklenemezse varsayılan Map.tscn
+func _get_map_scene() -> PackedScene:
+	var path: String = NetworkManager.get_map_info()["scene"]
+	if ResourceLoader.exists(path):
+		var scene := load(path) as PackedScene
+		if scene:
+			return scene
+	return map_scene
+
+
 func _spawn_local_player() -> void:
 	var local_id := NetworkManager.get_local_id()
 	var player_data: Dictionary = NetworkManager.players.get(local_id, {})
 	var team_id: int = player_data.get("team_id", 0)
 	var spawn_pos: Vector3 = TeamManager.get_spawn_position(team_id)
+	# Host migration sonrası: kaldığın yerden devam (konum isimle saklanır — peer id'ler değişir)
+	var my_name: String = player_data.get("name", "")
+	if _pending_positions.has(my_name):
+		spawn_pos = _pending_positions[my_name]
+		_pending_positions.erase(my_name)
 
 	var player: CharacterBody3D = player_scene.instantiate()
 	player.name = "Player_%d" % local_id
@@ -378,7 +395,26 @@ func get_migration_state() -> Dictionary:
 	gstate["scores"]   = TeamManager.scores.duplicate()
 	gstate["card_pos"] = card_pos
 	gstate["door_pos"] = door_pos
+	# Oyuncu konumları (isimle; ölüler hariç — onlar spawn noktasında doğar)
+	var positions := {}
+	for pid in active_players:
+		var p: Node = active_players[pid]
+		if p and is_instance_valid(p) and not p.is_dead:
+			var pname: String = NetworkManager.players.get(pid, {}).get("name", "")
+			if not pname.is_empty():
+				positions[pname] = (p as Node3D).global_position
+	gstate["positions"] = positions
+	gstate["stats_by_name"] = _stats_by_name()
 	return gstate
+
+
+func _stats_by_name() -> Dictionary:
+	var out := {}
+	for pid in player_stats:
+		var pname: String = NetworkManager.players.get(pid, {}).get("name", "")
+		if not pname.is_empty():
+			out[pname] = player_stats[pid].duplicate()
+	return out
 
 
 ## Migration sonrası oyunu geri yükle (yeni host + yeniden bağlanan clientlar)
@@ -389,6 +425,9 @@ func restore_from_migration(mig: Dictionary) -> void:
 		TeamManager.scores[tid] = int(saved_scores[tid])
 	_pending_card_pos = mig.get("card_pos", Vector3.ZERO)
 	_pending_door_pos = mig.get("door_pos", Vector3.ZERO)
+	_pending_positions = mig.get("positions", {}).duplicate()
+	# Kill/ölüm istatistikleri isimle taşınır, yeni peer id'lere geri eşlenir
+	_restore_stats_by_name(mig.get("stats_by_name", {}))
 	# Oyun durumunu sıfırla
 	state = State.IN_GAME
 	card_carrier_peer_id = -1
@@ -399,7 +438,7 @@ func restore_from_migration(mig: Dictionary) -> void:
 			p.queue_free()
 	active_players.clear()
 	# Haritayı yeniden yükle
-	get_tree().change_scene_to_packed(map_scene)
+	get_tree().change_scene_to_packed(_get_map_scene())
 	await get_tree().process_frame
 	await get_tree().process_frame
 	_spawn_local_player()
@@ -407,9 +446,26 @@ func restore_from_migration(mig: Dictionary) -> void:
 		# Kart ve kapıyı kaydedilen pozisyona spawn et
 		_spawn_objects_rpc.rpc(_pending_card_pos, _pending_door_pos)
 	emit_signal("game_started")
-	# Migration sonrası tek takım kaldıysa kazandı ilan et
-	await get_tree().process_frame
-	_check_last_team_standing()
+	# Migration sonrası tek takım kaldıysa kazandı ilan et — ama önce diğerlerinin yeniden bağlanmasını bekle
+	# (hemen kontrol edilirse yeni host sadece kendi takımını görüp oyunu anında bitiriyordu)
+	if NetworkManager.is_host():
+		await get_tree().create_timer(NetworkManager.MIGRATION_WINDOW_MS / 1000.0).timeout
+		_check_last_team_standing()
+
+
+## Host: migration penceresinde yeniden bağlanan oyuncunun istatistiğini yeni peer id'sine taşı
+func adopt_migrated_stats(peer_id: int, player_name: String) -> void:
+	if _migrated_stats.has(player_name):
+		player_stats[peer_id] = (_migrated_stats[player_name] as Dictionary).duplicate()
+
+
+func _restore_stats_by_name(by_name: Dictionary) -> void:
+	_migrated_stats = by_name.duplicate(true)
+	player_stats.clear()
+	for pid in NetworkManager.players:
+		var pname: String = NetworkManager.players[pid].get("name", "")
+		if by_name.has(pname):
+			player_stats[pid] = (by_name[pname] as Dictionary).duplicate()
 
 
 func return_to_menu() -> void:

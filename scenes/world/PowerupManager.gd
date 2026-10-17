@@ -7,7 +7,7 @@
 ##   _spawn_rpc / _despawn_rpc        → Powerup.gd nesneleri (tüm peer'lar)
 ##   _set_item_rpc(peer, type)        → envanter (herkese; HUD sadece kendini gösterir)
 ##   _bomb_rpc(...)                   → Bomb.gd görseli (herkese), hasar host'ta _detonate'te
-##   _reveal_rpc(team, kind, süre)    → uydu: o takımın minimapinde kart+kapı ("objectives") / düşmanlar ("enemies")
+##   _reveal_rpc(team, kind, süre)    → uydu: o takımın minimapinde tüm oyuncular + kart taşıyıcı ("all_players") / düşmanlar ("enemies")
 ## Sinyaller (HUD/Minimap dinler): inventory_changed(type), reveal_started(kind, dur, own_team), notice(text, color)
 
 extends Node
@@ -23,7 +23,7 @@ const NONE := -1
 const INFO := {
 	Type.BOMB:      {"name": "BOMBA",         "glyph": "✸", "color": Color(1.0, 0.42, 0.22), "desc": "Fareye fırlat, alan hasarı"},
 	Type.HEAL:      {"name": "SAĞLIK",        "glyph": "✚", "color": Color(0.35, 0.95, 0.5),  "desc": "+%d can"},
-	Type.INTEL_SAT: {"name": "UYDU",          "glyph": "◈", "color": Color(0.3, 0.85, 1.0),   "desc": "Kart + kapı haritada"},
+	Type.INTEL_SAT: {"name": "UYDU",          "glyph": "◈", "color": Color(0.3, 0.85, 1.0),   "desc": "Tüm oyuncular + kart taşıyıcı haritada"},
 	Type.ENEMY_SAT: {"name": "TAKIM UYDUSU",  "glyph": "◉", "color": Color(0.8, 0.45, 1.0),   "desc": "Düşmanlar haritada"},
 }
 const WEIGHTS := {Type.BOMB: 30, Type.HEAL: 30, Type.INTEL_SAT: 20, Type.ENEMY_SAT: 20}
@@ -45,6 +45,8 @@ const INTEL_DURATION := 8.0
 const ENEMY_SAT_DURATION := 6.0
 
 const USE_KEY := KEY_Q
+## Test modu: editörden/debug build'den çalıştırınca açık (F1-F5, bkz _handle_test_key). false yapılırsa tamamen kapanır.
+var TEST_MODE := OS.is_debug_build()
 const PICKUP_RANGE := 2.5          # host doğrulaması
 
 const POWERUP_SCRIPT := preload("res://scenes/world/Powerup.gd")
@@ -103,7 +105,12 @@ func _process(delta: float) -> void:
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	var k := event as InputEventKey
-	if k == null or not k.pressed or k.echo or k.physical_keycode != USE_KEY or ChatBox.is_typing:
+	if k == null or not k.pressed or k.echo or ChatBox.is_typing:
+		return
+	if TEST_MODE and _handle_test_key(k.physical_keycode):
+		get_viewport().set_input_as_handled()
+		return
+	if k.physical_keycode != USE_KEY:
 		return
 	var me := _local_player()
 	if me == null or me.is_dead or get_item(NetworkManager.get_local_id()) == NONE:
@@ -114,6 +121,55 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		_request_use(aim)
 	else:
 		_request_use.rpc_id(1, aim)
+
+
+# ─────────────────────────────────────────────
+#  TEST MODU (sadece debug build — editörden çalıştırınca; dışa aktarılmış oyunda kapalı)
+#  F1 bomba · F2 sağlık · F3 uydu · F4 takım uydusu → doğrudan envantere (slot doluysa değiştirir)
+#  F5 → önüne rastgele bir güç doğur (yerden almayı denemek için)
+# ─────────────────────────────────────────────
+
+const TEST_KEYS := {KEY_F1: Type.BOMB, KEY_F2: Type.HEAL, KEY_F3: Type.INTEL_SAT, KEY_F4: Type.ENEMY_SAT}
+
+
+func _handle_test_key(code: Key) -> bool:
+	var me := _local_player()
+	if me == null or me.is_dead:
+		return false
+	if TEST_KEYS.has(code):
+		if NetworkManager.is_host():
+			_request_test_give(TEST_KEYS[code])
+		else:
+			_request_test_give.rpc_id(1, TEST_KEYS[code])
+		return true
+	if code == KEY_F5:
+		var fwd: Vector3 = -(me as Node3D).global_transform.basis.z
+		var pos: Vector3 = (me as Node3D).global_position + Vector3(fwd.x, 0, fwd.z).normalized() * 2.5
+		if NetworkManager.is_host():
+			_request_test_spawn(pos)
+		else:
+			_request_test_spawn.rpc_id(1, pos)
+		return true
+	return false
+
+
+@rpc("any_peer", "reliable")
+func _request_test_give(type: int) -> void:
+	if not NetworkManager.is_host() or not TEST_MODE or not INFO.has(type):
+		return  # host da debug build olmalı
+	var peer := multiplayer.get_remote_sender_id()
+	if peer == 0:
+		peer = 1
+	_set_item_rpc.rpc(peer, type)
+
+
+@rpc("any_peer", "reliable")
+func _request_test_spawn(pos: Vector3) -> void:
+	if not NetworkManager.is_host() or not TEST_MODE:
+		return
+	var id := _next_id
+	_next_id += 1
+	_spawn_rpc.rpc(id, _pick_type(), Vector3(pos.x, 0.0, pos.z), 15.0)
 
 
 # ─────────────────────────────────────────────
@@ -282,7 +338,8 @@ func _request_use(aim: Vector3) -> void:
 		Type.BOMB:
 			_throw_bomb(peer, team, player as Node3D, aim)
 		Type.INTEL_SAT:
-			_reveal_rpc.rpc(team, "objectives", INTEL_DURATION, peer)
+			# Tüm oyuncular + kart taşıyıcı (kart/kapı konumu GÖSTERİLMEZ) — Minimap._draw_satellite_reveals
+			_reveal_rpc.rpc(team, "all_players", INTEL_DURATION, peer)
 		Type.ENEMY_SAT:
 			_reveal_rpc.rpc(team, "enemies", ENEMY_SAT_DURATION, peer)
 
@@ -303,7 +360,7 @@ func _throw_bomb(peer: int, team: int, player: Node3D, aim: Vector3) -> void:
 		target = Vector3(back.x, 0.15, back.z)
 	var id := _next_id
 	_next_id += 1
-	_bomb_rpc.rpc(id, from, target, team)
+	_bomb_rpc.rpc(id, from, target, team, peer)
 	_detonate_later(peer, team, target)
 
 
@@ -341,7 +398,11 @@ func _player_rids() -> Array[RID]:
 
 
 @rpc("authority", "call_local", "reliable")
-func _bomb_rpc(_id: int, from: Vector3, target: Vector3, team: int) -> void:
+func _bomb_rpc(_id: int, from: Vector3, target: Vector3, team: int, thrower: int = -1) -> void:
+	# Fırlatanın el bombası atma animasyonu (her peer'da)
+	var pl: Variant = GameManager.active_players.get(thrower)
+	if pl != null and is_instance_valid(pl) and pl.has_method("play_action"):
+		pl.play_action(1)  # Player.Action.TOSS
 	var bomb: Node3D = BOMB_SCRIPT.new()
 	bomb.setup(from, target, BOMB_FLIGHT, BOMB_FUSE, BOMB_RADIUS, TeamManager.get_color(team))
 	get_parent().add_child(bomb)
@@ -354,8 +415,8 @@ func _reveal_rpc(team: int, kind: String, duration: float, user_peer: int) -> vo
 	if team == local_team:
 		reveal_until[kind] = Time.get_ticks_msec() / 1000.0 + duration
 		reveal_started.emit(kind, duration, true)
-		var txt := "◈ UYDU (%s): kart ve kapı haritada" if kind == "objectives" else "◉ TAKIM UYDUSU (%s): düşmanlar haritada"
-		notice.emit(txt % user_name, Color(INFO[Type.INTEL_SAT if kind == "objectives" else Type.ENEMY_SAT]["color"]))
-	elif kind == "enemies":
+		var txt := "◈ UYDU (%s): tüm oyuncular haritada" if kind == "all_players" else "◉ TAKIM UYDUSU (%s): düşmanlar haritada"
+		notice.emit(txt % user_name, Color(INFO[Type.INTEL_SAT if kind == "all_players" else Type.ENEMY_SAT]["color"]))
+	elif kind == "enemies" or kind == "all_players":
 		reveal_started.emit(kind, duration, false)
 		notice.emit("⚠ %s TAKIM UYDUSU KONUMUNUZU TESPİT ETTİ!" % TeamManager.get_team_name(team).to_upper(), UITheme.DANGER)

@@ -1,6 +1,9 @@
-res://scenes/world/Map.tscn
+res://autoload/GameManager.gd
+res://autoload/NetworkManager.gd
+res://autoload/RoomManager.gd
+res://scenes/player/SurvivalistModel.gd
+res://scenes/ui/Lobby.gd
+res://scenes/ui/MainMenu.gd
 res://default_env.tres
+res://scenes/player/HandRifle.gd
 res://scenes/player/Player.gd
-res://scenes/ui/HUD.gd
-res://scenes/weapons/Bullet.gd
-res://scenes/world/PowerupManager.gd

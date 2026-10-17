@@ -1,14 +1,29 @@
 ## Lobby.gd
-## Oda içi bekleme ekranı: 4 tıklanabilir takım kartı (5'er slot), takım seçmeyenler şeridi,
-## alt çubukta hazır / oyunu başlat. UI tamamen kodla kurulur; görünüm UITheme'den gelir,
-## arka plan MainMenu ile aynı MenuBackdrop.gdshader (el feneri rengi kendi takımına döner).
+## Oda içi bekleme ekranı: 4 tıklanabilir takım kartı (slot sayısı = takım boyutu, kompakt), alt bölümde
+## sohbet | ODA AYARLARI (harita, takım boyutu 2v2v2v2-5v5v5v5, şifre — sadece host değiştirir) | takımsızlar +
+## hazır/başlat. UI tamamen kodla kurulur; görünüm UITheme'den gelir,
+## arka plan MainMenu ile aynı MenuBackground3D (fenerli askerler; fare feneri kendi takımının rengine döner).
 
 extends Control
 
-const TEAM_SIZE := 5  # 5v5v5v5 — sadece gösterim + client tarafı engel
+# Oda ayarları paneli
+var _map_option: OptionButton
+var _size_option: OptionButton
+var _pw_status: Label
+var _pw_input: LineEdit
+var _pw_row: HBoxContainer
+var _pw_remove: Button
+var _settings_hint: Label
+var _settings_summary: Label
+var _draft_note: Label
+var _save_btn: Button
+var _settings_modal: Control
+var _settings_card: Control
+var _blur_mat: ShaderMaterial
 
-var _backdrop_mat: ShaderMaterial
-var _light_pos := Vector2.ZERO
+const MENU_BACKGROUND := preload("res://scenes/ui/MenuBackground3D.gd")
+const MENU_OVERLAY := preload("res://scenes/ui/MenuOverlay.gdshader")
+var _background: Node = null
 var _light_color := UITheme.ACCENT
 
 var _room_name_lbl: Label
@@ -31,20 +46,19 @@ func _ready() -> void:
 	UITheme.apply(get_tree())
 	NetworkManager.player_list_updated.connect(_refresh_player_list)
 	NetworkManager.host_migrated.connect(_on_host_migrated)
+	NetworkManager.room_settings_changed.connect(_on_settings_changed)
 	GameManager.game_started.connect(_on_game_started)
 
 	_build_ui()
-	_light_pos = get_viewport_rect().size * Vector2(0.5, 0.3)
 	_update_room_info()
+	_refresh_settings()
 	_refresh_player_list()
 
 
 func _process(delta: float) -> void:
-	_light_pos = _light_pos.lerp(get_local_mouse_position(), 1.0 - exp(-5.0 * delta))
-	_backdrop_mat.set_shader_parameter("light_pos", _light_pos)
-	_backdrop_mat.set_shader_parameter("rect_size", size)
-	var cur: Color = _backdrop_mat.get_shader_parameter("light_color")
-	_backdrop_mat.set_shader_parameter("light_color", cur.lerp(_light_color, 1.0 - exp(-3.0 * delta)))
+	# Fare feneri yavaşça kendi takımının rengine döner
+	if _background:
+		_background.light_color = (_background.light_color as Color).lerp(_light_color, 1.0 - exp(-3.0 * delta))
 
 
 # ─────────────────────────────────────────────
@@ -52,14 +66,16 @@ func _process(delta: float) -> void:
 # ─────────────────────────────────────────────
 
 func _build_ui() -> void:
-	var backdrop := ColorRect.new()
-	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
-	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_backdrop_mat = ShaderMaterial.new()
-	_backdrop_mat.shader = preload("res://scenes/ui/MenuBackdrop.gdshader")
-	_backdrop_mat.set_shader_parameter("light_color", UITheme.ACCENT)
-	backdrop.material = _backdrop_mat
-	add_child(backdrop)
+	# 3D arka plan (MainMenu ile aynı): fenerli askerler devriyede, fare feneri takım renginde
+	_background = MENU_BACKGROUND.new()
+	add_child(_background)
+	var overlay := ColorRect.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var om := ShaderMaterial.new()
+	om.shader = MENU_OVERLAY
+	overlay.material = om
+	add_child(overlay)
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -75,32 +91,38 @@ func _build_ui() -> void:
 
 	root.add_child(_build_header())
 
+	# Takım kartları: içerik kadar yükseklik (slot sayısı = takım boyutu) — boş alan alt bölüme kalır
 	var team_row := HBoxContainer.new()
 	team_row.add_theme_constant_override("separation", 14)
-	team_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(team_row)
-	for i in range(4):
+	for i in range(NetworkManager.TEAM_COUNT):
 		team_row.add_child(_build_team_card(i))
 
-	# Alt bölüm: solda sohbet, sağda takım seçmeyenler + hazır/başlat
+	# Alt bölüm: sohbet | oda ayarları | takımsızlar + hazır/başlat
 	var bottom := HBoxContainer.new()
 	bottom.add_theme_constant_override("separation", 14)
+	bottom.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(bottom)
 
 	var chat := ChatBox.new()
 	chat.mode = ChatBox.Mode.LOBBY
-	chat.custom_minimum_size = Vector2(460, 170)
+	chat.custom_minimum_size = Vector2(340, 150)
+	chat.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bottom.add_child(chat)
+
 
 	var right := VBoxContainer.new()
 	right.add_theme_constant_override("separation", 10)
-	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right.custom_minimum_size = Vector2(330, 0)
 	bottom.add_child(right)
+	right.add_child(_build_unassigned_strip())
 	var fill := Control.new()
 	fill.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	right.add_child(fill)
-	right.add_child(_build_unassigned_strip())
 	right.add_child(_build_bottom_bar())
+
+	# Ayarlar penceresi en üstte (⚙ ile açılır, arka plan bulanıklaşır)
+	_build_settings_modal()
 
 
 func _build_header() -> Control:
@@ -115,6 +137,9 @@ func _build_header() -> Control:
 	_room_name_lbl = UITheme.label("", 26, UITheme.TEXT, UITheme.font_bold)
 	_room_name_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	title_box.add_child(_room_name_lbl)
+	# Ayar özeti (format · harita · şifre) — ayrıntılar ⚙ penceresinde
+	_settings_summary = UITheme.label("", 11, UITheme.TEXT_DIM, UITheme.font_caps)
+	title_box.add_child(_settings_summary)
 
 	# Oyuncu sayısı
 	var count_chip := PanelContainer.new()
@@ -157,6 +182,19 @@ func _build_header() -> Control:
 	leave.focus_mode = Control.FOCUS_NONE
 	leave.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	leave.pressed.connect(_on_back_pressed)
+
+	# ⚙ Oda ayarları (sağ üst, oda bilgilerinin yanında)
+	var gear := Button.new()
+	gear.text = "⚙"
+	gear.tooltip_text = "Oda ayarları"
+	gear.focus_mode = Control.FOCUS_NONE
+	gear.custom_minimum_size = Vector2(46, 46)
+	gear.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	gear.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	gear.add_theme_font_size_override("font_size", 22)
+	gear.pressed.connect(_open_settings)
+	header.add_child(gear)
+	header.move_child(gear, leave.get_index())
 	header.add_child(leave)
 	return header
 
@@ -166,6 +204,7 @@ func _build_team_card(team_id: int) -> Control:
 
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	panel.gui_input.connect(_on_panel_input.bind(team_id))
 	panel.mouse_entered.connect(_on_team_hover.bind(team_id, true))
@@ -177,7 +216,7 @@ func _build_team_card(team_id: int) -> Control:
 
 	# Başlık: renk şeridi + isim + doluluk
 	var header := PanelContainer.new()
-	var hs := UITheme.style(Color(color, 0.12), 0, Color.TRANSPARENT, 0, 16, 14)
+	var hs := UITheme.style(Color(color, 0.12), 0, Color.TRANSPARENT, 0, 14, 9)
 	hs.corner_radius_top_left = 12
 	hs.corner_radius_top_right = 12
 	hs.border_width_top = 3
@@ -190,25 +229,25 @@ func _build_team_card(team_id: int) -> Control:
 	name_box.add_theme_constant_override("separation", 0)
 	name_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hrow.add_child(name_box)
-	name_box.add_child(UITheme.label("TAKIM %d" % (team_id + 1), 10, Color(color, 0.8), UITheme.font_caps))
-	name_box.add_child(UITheme.label(TeamManager.get_team_name(team_id).to_upper(), 18, color, UITheme.font_title))
-	var count_lbl := UITheme.label("0/%d" % TEAM_SIZE, 15, UITheme.TEXT, UITheme.font_bold)
+	name_box.add_child(UITheme.label(TeamManager.get_team_name(team_id).to_upper(), 17, color, UITheme.font_title))
+	var count_lbl := UITheme.label("0/%d" % NetworkManager.get_team_size(), 14, UITheme.TEXT, UITheme.font_bold)
 	count_lbl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	hrow.add_child(count_lbl)
 
-	# Slotlar
+	# Slotlar (kompakt — kart yüksekliği slot sayısı kadar)
 	var slots_margin := MarginContainer.new()
-	slots_margin.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	for side: String in ["left", "right", "top", "bottom"]:
-		slots_margin.add_theme_constant_override("margin_" + side, 10)
+	for side: String in ["left", "right"]:
+		slots_margin.add_theme_constant_override("margin_" + side, 8)
+	slots_margin.add_theme_constant_override("margin_top", 8)
+	slots_margin.add_theme_constant_override("margin_bottom", 8)
 	box.add_child(slots_margin)
 	var slots := VBoxContainer.new()
-	slots.add_theme_constant_override("separation", 6)
+	slots.add_theme_constant_override("separation", 4)
 	slots_margin.add_child(slots)
 
 	# Alt şerit
 	var footer := PanelContainer.new()
-	footer.custom_minimum_size = Vector2(0, 36)
+	footer.custom_minimum_size = Vector2(0, 28)
 	box.add_child(footer)
 	var footer_lbl := UITheme.label("", 11, UITheme.TEXT_DIM, UITheme.font_caps)
 	footer_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -234,27 +273,31 @@ func _build_unassigned_strip() -> Control:
 
 func _build_bottom_bar() -> Control:
 	var bar := PanelContainer.new()
-	bar.add_theme_stylebox_override("panel", UITheme.style(UITheme.SURFACE, 14, UITheme.BORDER, 1, 20, 12))
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 14)
-	bar.add_child(row)
+	bar.add_theme_stylebox_override("panel", UITheme.style(UITheme.SURFACE, 14, UITheme.BORDER, 1, 16, 12))
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 10)
+	bar.add_child(col)
 
 	var checks := VBoxContainer.new()
 	checks.add_theme_constant_override("separation", 3)
-	checks.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	checks.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(checks)
+	col.add_child(checks)
 	_check_balance = UITheme.label("", 13, UITheme.TEXT_DIM)
 	checks.add_child(_check_balance)
 	_check_ready = UITheme.label("", 13, UITheme.TEXT_DIM)
 	checks.add_child(_check_ready)
 
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	col.add_child(row)
+
 	_host_hint = UITheme.label("Oyunu oda sahibi başlatacak", 12, UITheme.TEXT_DIM)
 	_host_hint.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_host_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(_host_hint)
 
 	_ready_btn = Button.new()
-	_ready_btn.custom_minimum_size = Vector2(160, 46)
+	_ready_btn.custom_minimum_size = Vector2(140, 44)
+	_ready_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_ready_btn.focus_mode = Control.FOCUS_NONE
 	_ready_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	_ready_btn.add_theme_font_size_override("font_size", 15)
@@ -264,13 +307,265 @@ func _build_bottom_bar() -> Control:
 	_start_btn = Button.new()
 	_start_btn.text = "OYUNU BAŞLAT  ▶"
 	_start_btn.theme_type_variation = "PrimaryButton"
-	_start_btn.custom_minimum_size = Vector2(180, 46)
+	_start_btn.custom_minimum_size = Vector2(150, 44)
+	_start_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_start_btn.focus_mode = Control.FOCUS_NONE
 	_start_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	_start_btn.add_theme_font_size_override("font_size", 15)
 	_start_btn.pressed.connect(_on_start_btn_pressed)
 	row.add_child(_start_btn)
 	return bar
+
+
+## ⚙ Ayarlar penceresi: tam ekran katman (bulanık + karartılmış arka plan, dışına tıklayınca/ESC kapanır)
+## + ortada kart. Host düzenler; diğerleri aynı pencereyi salt-okunur görür.
+func _build_settings_modal() -> void:
+	_settings_modal = Control.new()
+	_settings_modal.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_settings_modal.mouse_filter = Control.MOUSE_FILTER_STOP
+	_settings_modal.visible = false
+	add_child(_settings_modal)
+
+	var blur := ColorRect.new()
+	blur.set_anchors_preset(Control.PRESET_FULL_RECT)
+	blur.mouse_filter = Control.MOUSE_FILTER_STOP
+	_blur_mat = ShaderMaterial.new()
+	_blur_mat.shader = preload("res://scenes/ui/BlurBackdrop.gdshader")
+	blur.material = _blur_mat
+	blur.gui_input.connect(func(e: InputEvent) -> void:
+		var mb := e as InputEventMouseButton
+		if mb and mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+			_close_settings())
+	_settings_modal.add_child(blur)
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_settings_modal.add_child(center)
+	_settings_card = _build_settings_panel()
+	center.add_child(_settings_card)
+
+
+func _open_settings() -> void:
+	_load_draft()
+	_settings_modal.visible = true
+	_settings_card.pivot_offset = _settings_card.size * 0.5
+	_settings_card.modulate.a = 0.0
+	_settings_card.scale = Vector2(0.96, 0.96)
+	var tw := create_tween().set_parallel(true)
+	tw.tween_method(func(v: float) -> void: _blur_mat.set_shader_parameter("amount", v), 0.0, 1.0, 0.18)
+	tw.tween_property(_settings_card, "modulate:a", 1.0, 0.16)
+	tw.tween_property(_settings_card, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+## Kapat = taslağı at (değişiklikler uygulanmaz). Kaydet önce _apply_draft çağırır.
+func _close_settings() -> void:
+	if not _settings_modal.visible:
+		return
+	_pw_input.text = ""
+	var tw := create_tween().set_parallel(true)
+	tw.tween_method(func(v: float) -> void: _blur_mat.set_shader_parameter("amount", v), 1.0, 0.0, 0.14)
+	tw.tween_property(_settings_card, "modulate:a", 0.0, 0.12)
+	tw.chain().tween_callback(func() -> void: _settings_modal.visible = false)
+
+
+## ODA AYARLARI kartı: harita, takım boyutu, şifre. TASLAK mantığı — kontroller sadece taslağı değiştirir,
+## [KAYDET] hepsini birlikte uygular, [KAPAT]/✕/ESC/dışına tıklama taslağı atar.
+func _build_settings_panel() -> Control:
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(440, 0)
+	var st := UITheme.style(UITheme.SURFACE_2, 16, Color(UITheme.ACCENT, 0.3), 1, 24, 20)
+	st.shadow_color = Color(0, 0, 0, 0.5)
+	st.shadow_size = 30
+	panel.add_theme_stylebox_override("panel", st)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 12)
+	panel.add_child(box)
+
+	var head := HBoxContainer.new()
+	box.add_child(head)
+	var titles := VBoxContainer.new()
+	titles.add_theme_constant_override("separation", 0)
+	titles.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(titles)
+	titles.add_child(UITheme.label("⚙  ODA AYARLARI", 11, UITheme.ACCENT, UITheme.font_caps))
+	_settings_hint = UITheme.label("", 12, UITheme.TEXT_DIM)
+	titles.add_child(_settings_hint)
+	var close_x := Button.new()
+	close_x.text = "✕"
+	close_x.theme_type_variation = "GhostButton"
+	close_x.focus_mode = Control.FOCUS_NONE
+	close_x.tooltip_text = "Kaydetmeden kapat (ESC)"
+	close_x.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	close_x.pressed.connect(_close_settings)
+	head.add_child(close_x)
+	box.add_child(HSeparator.new())
+
+	# Harita
+	_map_option = OptionButton.new()
+	for m: Dictionary in NetworkManager.MAPS:
+		_map_option.add_item(m["name"])
+	_map_option.item_selected.connect(func(_i: int) -> void: _update_draft_ui())
+	box.add_child(_setting_row("HARİTA", _map_option))
+
+	# Takım boyutu: 2v2v2v2 … 5v5v5v5
+	_size_option = OptionButton.new()
+	for s in range(NetworkManager.TEAM_SIZE_MIN, NetworkManager.TEAM_SIZE_MAX + 1):
+		_size_option.add_item("%s  (%d oyuncu)" % [NetworkManager.get_format_text(s), s * NetworkManager.TEAM_COUNT])
+	_size_option.item_selected.connect(func(_i: int) -> void: _update_draft_ui())
+	box.add_child(_setting_row("FORMAT", _size_option))
+
+	# Şifre: mevcut durum + (host) yeni şifre yaz VEYA kaldır işaretle
+	_pw_status = UITheme.label("", 13, UITheme.TEXT)
+	box.add_child(_setting_row("ŞİFRE", _pw_status))
+	_pw_row = HBoxContainer.new()
+	_pw_row.add_theme_constant_override("separation", 6)
+	box.add_child(_pw_row)
+	_pw_input = LineEdit.new()
+	_pw_input.placeholder_text = "Yeni şifre (boş = değiştirme)"
+	_pw_input.secret = true
+	_pw_input.max_length = 24
+	_pw_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_pw_input.text_changed.connect(func(t: String) -> void:
+		if not t.strip_edges().is_empty():
+			_pw_remove.set_pressed_no_signal(false)
+		_update_draft_ui())
+	_pw_input.text_submitted.connect(func(_t: String) -> void: _on_save_settings())
+	_pw_row.add_child(_pw_input)
+	_pw_remove = Button.new()
+	_pw_remove.text = "Şifreyi kaldır"
+	_pw_remove.toggle_mode = true
+	_pw_remove.theme_type_variation = "GhostButton"
+	_pw_remove.focus_mode = Control.FOCUS_NONE
+	_pw_remove.toggled.connect(func(on: bool) -> void:
+		if on:
+			_pw_input.text = ""
+		_update_draft_ui())
+	_pw_row.add_child(_pw_remove)
+
+	# Kaydedilecek değişikliklerin özeti
+	_draft_note = UITheme.label("", 12, UITheme.TEXT_DIM)
+	_draft_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(_draft_note)
+
+	# Alt butonlar: KAPAT (taslağı at) / KAYDET (uygula)
+	var footer := HBoxContainer.new()
+	footer.add_theme_constant_override("separation", 10)
+	footer.alignment = BoxContainer.ALIGNMENT_END
+	box.add_child(footer)
+	var cancel := Button.new()
+	cancel.text = "Kapat"
+	cancel.theme_type_variation = "GhostButton"
+	cancel.custom_minimum_size = Vector2(110, 42)
+	cancel.focus_mode = Control.FOCUS_NONE
+	cancel.pressed.connect(_close_settings)
+	footer.add_child(cancel)
+	_save_btn = Button.new()
+	_save_btn.text = "KAYDET"
+	_save_btn.theme_type_variation = "PrimaryButton"
+	_save_btn.custom_minimum_size = Vector2(140, 42)
+	_save_btn.focus_mode = Control.FOCUS_NONE
+	_save_btn.pressed.connect(_on_save_settings)
+	footer.add_child(_save_btn)
+	return panel
+
+
+func _setting_row(caption: String, control: Control) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	var cap := UITheme.label(caption, 10, UITheme.TEXT_DIM, UITheme.font_caps)
+	cap.custom_minimum_size = Vector2(80, 0)
+	cap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(cap)
+	control.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(control)
+	return row
+
+
+## Pencere açılırken taslağı mevcut ayarlardan doldur
+func _load_draft() -> void:
+	var map_id: String = NetworkManager.get_map_info()["id"]
+	for i in NetworkManager.MAPS.size():
+		if NetworkManager.MAPS[i]["id"] == map_id:
+			_map_option.select(i)
+	_size_option.select(NetworkManager.get_team_size() - NetworkManager.TEAM_SIZE_MIN)
+	_pw_input.text = ""
+	_pw_remove.set_pressed_no_signal(false)
+	var is_host := NetworkManager.is_host()
+	_map_option.disabled = not is_host
+	_size_option.disabled = not is_host
+	_pw_row.visible = is_host
+	_save_btn.visible = is_host
+	_settings_hint.text = "Değişiklikler KAYDET'e basınca uygulanır" if is_host else "Sadece oda sahibi değiştirebilir"
+	_update_draft_ui()
+
+
+## Taslak ile mevcut ayar farkı → özet metni + KAYDET aktif/pasif
+func _update_draft_ui() -> void:
+	var has_pw: bool = NetworkManager.room_settings.get("has_password", false)
+	_pw_status.text = "🔒  Şifreli" if has_pw else "Açık oda"
+	_pw_status.add_theme_color_override("font_color", UITheme.ACCENT if has_pw else UITheme.TEXT_DIM)
+	_pw_remove.disabled = not has_pw
+	var changes: PackedStringArray = []
+	var new_map: Dictionary = NetworkManager.MAPS[_map_option.selected]
+	if new_map["id"] != NetworkManager.get_map_info()["id"]:
+		changes.append("harita → %s" % new_map["name"])
+	var new_size := NetworkManager.TEAM_SIZE_MIN + _size_option.selected
+	if new_size != NetworkManager.get_team_size():
+		changes.append("format → %s" % NetworkManager.get_format_text(new_size))
+		var overflow := 0
+		for tid in NetworkManager.TEAM_COUNT:
+			overflow += maxi(NetworkManager.get_team_count(tid) - new_size, 0)
+		if overflow > 0:
+			changes.append("%d oyuncu takımından çıkar" % overflow)
+	if not _pw_input.text.strip_edges().is_empty():
+		changes.append("şifre değişecek" if has_pw else "şifre eklenecek")
+	elif _pw_remove.button_pressed and has_pw:
+		changes.append("şifre kaldırılacak")
+	_save_btn.disabled = changes.is_empty()
+	if not NetworkManager.is_host():
+		_draft_note.text = ""
+	elif changes.is_empty():
+		_draft_note.text = "Değişiklik yok"
+		_draft_note.add_theme_color_override("font_color", Color(UITheme.TEXT_DIM, 0.7))
+	else:
+		_draft_note.text = "Kaydedilince: " + ", ".join(changes)
+		_draft_note.add_theme_color_override("font_color", UITheme.ACCENT)
+
+
+## KAYDET: taslağı tek seferde uygula, pencereyi kapat
+func _on_save_settings() -> void:
+	if not NetworkManager.is_host() or _save_btn.disabled:
+		return
+	var new_map: String = NetworkManager.MAPS[_map_option.selected]["id"]
+	if new_map != NetworkManager.get_map_info()["id"]:
+		NetworkManager.set_map(new_map)
+	var new_size := NetworkManager.TEAM_SIZE_MIN + _size_option.selected
+	if new_size != NetworkManager.get_team_size():
+		NetworkManager.set_team_size(new_size)
+	var pw := _pw_input.text.strip_edges()
+	if not pw.is_empty():
+		NetworkManager.set_room_password(pw)
+	elif _pw_remove.button_pressed:
+		NetworkManager.set_room_password("")
+	_close_settings()
+
+
+func _on_settings_changed() -> void:
+	_refresh_settings()
+	_refresh_player_list()
+	# Pencere açıkken ayarlar başka yerden değişirse (ör. host devri) farkı yeniden hesapla
+	if _settings_modal and _settings_modal.visible:
+		_update_draft_ui()
+
+
+## Başlıktaki özet (pencere taslağına dokunmaz)
+func _refresh_settings() -> void:
+	if _settings_summary == null:
+		return
+	var has_pw: bool = NetworkManager.room_settings.get("has_password", false)
+	_settings_summary.text = "%s  ·  %s%s" % [NetworkManager.get_format_text(), String(NetworkManager.get_map_info()["name"]).to_upper(),
+		"  ·  🔒 ŞİFRELİ" if has_pw else ""]
 
 
 # ─────────────────────────────────────────────
@@ -282,8 +577,8 @@ func _build_player_slot(peer_id: int, data: Dictionary, team_color: Color, is_me
 	var ready_flag: bool = data.get("is_ready", false)
 
 	var slot := PanelContainer.new()
-	slot.custom_minimum_size = Vector2(0, 36)
-	var st := UITheme.style(Color(1, 1, 1, 0.04), 8, Color.TRANSPARENT, 0, 8, 6)
+	slot.custom_minimum_size = Vector2(0, 30)
+	var st := UITheme.style(Color(1, 1, 1, 0.04), 8, Color.TRANSPARENT, 0, 8, 3)
 	if is_me:
 		st.bg_color = Color(team_color, 0.14)
 		st.border_color = Color(team_color, 0.55)
@@ -316,8 +611,8 @@ func _build_player_slot(peer_id: int, data: Dictionary, team_color: Color, is_me
 
 func _build_empty_slot() -> Control:
 	var slot := PanelContainer.new()
-	slot.custom_minimum_size = Vector2(0, 36)
-	slot.add_theme_stylebox_override("panel", UITheme.style(Color.TRANSPARENT, 8, Color(1, 1, 1, 0.06), 1, 12, 6))
+	slot.custom_minimum_size = Vector2(0, 30)
+	slot.add_theme_stylebox_override("panel", UITheme.style(Color.TRANSPARENT, 8, Color(1, 1, 1, 0.06), 1, 12, 3))
 	var lbl := UITheme.label("+   Boş slot", 12, Color(UITheme.TEXT_DIM, 0.55))
 	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	slot.add_child(lbl)
@@ -354,7 +649,7 @@ func _on_panel_input(event: InputEvent, team_id: int) -> void:
 	var mb := event as InputEventMouseButton
 	if mb == null or not mb.pressed or mb.button_index != MOUSE_BUTTON_LEFT:
 		return
-	if team_id == _get_local_team() or _get_team_count(team_id) >= TEAM_SIZE:
+	if team_id == _get_local_team() or _get_team_count(team_id) >= NetworkManager.get_team_size():
 		return
 	NetworkManager.request_change_team(team_id)
 
@@ -390,12 +685,17 @@ func _on_game_started() -> void:
 
 func _on_host_migrated() -> void:
 	_update_room_info()
+	_refresh_settings()
 	_refresh_player_list()
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.keycode == KEY_ESCAPE and event.pressed and not event.echo:
-		_on_back_pressed()
+		# Ayarlar açıksa ESC sadece pencereyi kapatır
+		if _settings_modal and _settings_modal.visible:
+			_close_settings()
+		else:
+			_on_back_pressed()
 		get_viewport().set_input_as_handled()
 
 
@@ -460,9 +760,9 @@ func _refresh_player_list() -> void:
 		var color := TeamManager.get_color(i)
 		for pid: int in members:
 			slots.add_child(_build_player_slot(pid, NetworkManager.players[pid], color, pid == local_id))
-		for _k in range(maxi(TEAM_SIZE - members.size(), 0)):
+		for _k in range(maxi(NetworkManager.get_team_size() - members.size(), 0)):
 			slots.add_child(_build_empty_slot())
-		(t["count_lbl"] as Label).text = "%d/%d" % [members.size(), TEAM_SIZE]
+		(t["count_lbl"] as Label).text = "%d/%d" % [members.size(), NetworkManager.get_team_size()]
 		_ignore_mouse_recursive(slots)
 
 	# Takım seçmeyenler
@@ -488,7 +788,7 @@ func _refresh_player_list() -> void:
 	_set_check(_check_balance, balanced, "Takımlar dengeli", "En az 2 takımda eşit oyuncu gerekli")
 	_set_check(_check_ready, ready_count == total and total > 0,
 		"Herkes hazır  (%d/%d)" % [ready_count, total], "Hazır olanlar  %d/%d" % [ready_count, total])
-	_player_count_lbl.text = "%d / %d" % [total, NetworkManager.MAX_PLAYERS]
+	_player_count_lbl.text = "%d / %d" % [total, NetworkManager.get_max_players()]
 
 	# Butonlar
 	var is_host := NetworkManager.is_host()
@@ -535,7 +835,7 @@ func _update_team_styles() -> void:
 		var t: Dictionary = _teams[i]
 		var color := TeamManager.get_color(i)
 		var is_mine := i == local_team
-		var is_full := _get_team_count(i) >= TEAM_SIZE
+		var is_full := _get_team_count(i) >= NetworkManager.get_team_size()
 		var is_hover := i == _hovered_team and not is_mine and not is_full
 
 		var ps := UITheme.style(UITheme.SURFACE_2 if is_hover else UITheme.SURFACE, 14, UITheme.BORDER, 1)

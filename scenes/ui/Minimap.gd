@@ -116,25 +116,24 @@ func _draw_satellite_reveals(local_team: int) -> void:
 	var font := ThemeDB.fallback_font
 	var status := ""
 
-	# ◈ Uydu: kart + kapı
-	if _powerups.is_revealed("objectives"):
+	# ◈ Uydu: TÜM oyuncular (her takım). Kart ve kapı gösterilmez — ama kart birinin üzerindeyse
+	# o taşıyıcı sarı elmas + halka ile işaretlenir (yerdeki kart gizli kalır).
+	if _powerups.is_revealed("all_players"):
 		var c: Color = _powerups.INFO[2]["color"]
-		if GameManager.door_instance and is_instance_valid(GameManager.door_instance):
-			var dp := _w2m(GameManager.door_instance.global_position)
-			draw_rect(Rect2(dp - Vector2(5, 5), Vector2(10, 10)), Color(0.4, 0.7, 1.0), true)
-			draw_rect(Rect2(dp - Vector2(8, 8), Vector2(16, 16)), Color(c, pulse), false, 1.5)
-		var card_pos := Vector3.INF
-		if GameManager.card_carrier_peer_id != -1:
-			var carrier: Variant = GameManager.active_players.get(GameManager.card_carrier_peer_id)
-			if carrier != null and is_instance_valid(carrier):
-				card_pos = (carrier as Node3D).global_position
-		elif GameManager.card_instance and is_instance_valid(GameManager.card_instance):
-			card_pos = GameManager.card_instance.global_position
-		if card_pos != Vector3.INF:
-			var cp := _w2m(card_pos)
-			draw_colored_polygon(PackedVector2Array([cp + Vector2(0, -7), cp + Vector2(6, 0), cp + Vector2(0, 7), cp + Vector2(-6, 0)]), Color(1.0, 0.9, 0.1))
-			draw_arc(cp, 10.0, 0.0, TAU, 20, Color(c, pulse), 1.5)
-		status += "◈ %d  " % ceili(_powerups.reveal_until["objectives"] - now)
+		for pid: int in GameManager.active_players:
+			var pl: Variant = GameManager.active_players[pid]
+			if pl == null or not is_instance_valid(pl) or pl.is_dead:
+				continue
+			var tid: int = NetworkManager.players.get(pid, {}).get("team_id", -1)
+			var pp := _w2m((pl as Node3D).global_position)
+			if pid != NetworkManager.get_local_id():
+				draw_circle(pp, 4.0, TeamManager.get_color(tid))
+				draw_arc(pp, 7.0, 0.0, TAU, 16, Color(c, pulse), 1.5)
+			if pid == GameManager.card_carrier_peer_id:
+				var dia := PackedVector2Array([pp + Vector2(0, -15), pp + Vector2(5, -10), pp + Vector2(0, -5), pp + Vector2(-5, -10)])
+				draw_colored_polygon(dia, Color(1.0, 0.9, 0.1))
+				draw_arc(pp, 11.0, 0.0, TAU, 24, Color(1.0, 0.9, 0.1, pulse), 2.0)
+		status += "◈ %d  " % ceili(_powerups.reveal_until["all_players"] - now)
 
 	# ◉ Takım uydusu: tüm düşmanlar
 	if _powerups.is_revealed("enemies"):

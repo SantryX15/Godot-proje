@@ -4,6 +4,8 @@
 extends Node3D
 
 signal ammo_changed(current: int, total: int, reloading: bool)
+## Her peer'da tetiklenir (_spawn_bullet call_local) — Player atış animasyonu için
+signal fired
 
 @export var damage: float = 25.0
 @export var fire_rate: float = 0.15
@@ -78,6 +80,7 @@ func _spawn_bullet(
 	get_tree().current_scene.add_child(bullet)
 	bullet.global_position = spawn_pos
 	bullet.initialize(direction, bullet_speed, damage, shooter_peer_id, shooter_team_id, p_max_distance)
+	fired.emit()
 
 
 # ─────────────────────────────────────────────

@@ -56,6 +56,7 @@ const ANIM_IDLE := &"Idle"
 const ANIM_RUN := &"Run"
 const ANIM_WALK := &"Walk"
 const ANIM_CROUCH := &"CrouchWalk"
+const ANIM_CROUCH_IDLE := &"CrouchIdle"
 const ANIM_DEATH := &"Death"
 const ANIM_BLEND := 0.18             # geçiş süresi (sn)
 const ANIM_MOVE_THRESHOLD := 0.4     # m/s üstü = hareket ediyor
@@ -90,9 +91,29 @@ var _crouch_delay := 0.0
 ## Bacak yönü / omurga dönüşü (bkz _update_leg_facing)
 const MAX_SPINE_TWIST := 1.92  # ~110°
 const LEG_TURN_SPEED := 10.0
+const AIM_CORR_GAIN := 10.0    # tüfek→nişan hizalama hızı (1/sn)
+const MAX_AIM_CORR := 1.4      # ~80° en fazla düzeltme
+var _aim_corr := 0.0
 var _leg_yaw := 0.0
 var _mesh_base_basis := Basis.IDENTITY
 const SPINE_TWIST_SCRIPT := preload("res://scenes/player/SpineTwistModifier.gd")
+const UPPER_BODY_SCRIPT := preload("res://scenes/player/UpperBodyLayer.gd")
+const HAND_RIFLE_SCRIPT := preload("res://scenes/player/HandRifle.gd")
+var _upper: Node = null       # UpperBodyLayer — tüfek pozları (AimIdle taban + aksiyonlar)
+var _hand_rifle: Node = null  # HandRifle — tüfek görseli eller arasında
+
+## Üst gövde aksiyonları (_action_rpc ile diğer peer'lara da oynatılır)
+enum Action { RELOAD, TOSS, HIT }
+const ANIM_AIM := &"AimIdle"
+const ANIM_FIRE_STAND := &"FireStand"
+const ANIM_FIRE_WALK := &"FireWalk"
+const ANIM_RELOAD := &"Reload"
+const ANIM_TOSS := &"Toss"
+const ANIM_HIT := &"HitReact"
+const ANIM_DYING := &"Dying"
+const DYING_SPEED := 1.6          # Dying 4.4 s → ~2.75 s (respawn 3 s'den önce bitsin)
+const TOSS_DURATION := 1.2        # Toss 3.2 s → bomba fırlatma hızında
+const FIRE_HOLD := 0.22           # son atıştan sonra ateş pozu ne kadar sürsün
 var _spine_twist: Node = null  # SpineTwistModifier (preload — global class cache'e bağımlı olmasın)
 var _idle_anim: StringName = &""
 var _last_anim_pos: Vector3 = Vector3.ZERO
@@ -126,8 +147,18 @@ func initialize(p_peer_id: int, p_team_id: int, p_character: String = "Visioner"
 		_mesh_base_basis = _char_mesh.transform.basis
 		var skeletons := _char_mesh.find_children("*", "Skeleton3D", true, false)
 		if not skeletons.is_empty() and _spine_twist == null:
+			var sk := skeletons[0] as Skeleton3D
+			# Modifier sırası önemli: üst gövde pozu → omurga dönüşü → tüfek ellere hizalanır
+			_upper = UPPER_BODY_SCRIPT.new()
+			sk.add_child(_upper)
 			_spine_twist = SPINE_TWIST_SCRIPT.new()
-			(skeletons[0] as Skeleton3D).add_child(_spine_twist)
+			sk.add_child(_spine_twist)
+			var rifle: Node3D = HAND_RIFLE_SCRIPT.build_rifle_mesh()
+			sk.add_child(rifle)
+			_hand_rifle = HAND_RIFLE_SCRIPT.new()
+			_hand_rifle.rifle = rifle
+			_hand_rifle.aim_node = self  # root -Z = nişan
+			sk.add_child(_hand_rifle)
 		_anim_player = _find_anim_player(_char_mesh)
 		_play_idle()
 		# BodyLight sadece karakter mesh'ine değsin (zemine/duvara ışık/gölge taşmasın)
@@ -258,11 +289,10 @@ func _update_animation(delta: float) -> void:
 	if moving and _anim_player.has_animation(clip):
 		# Bacaklar hareket yönüne döndüğü için animasyon hep ileri oynar
 		_set_anim(clip, clampf(_move_speed / float(MOVE_ANIM_REF_SPEED[move_mode]), 0.6, 2.2))
-	elif move_mode == MoveMode.CROUCH and _anim_player.has_animation(ANIM_CROUCH):
-		if _anim_player.current_animation != ANIM_CROUCH:
-			_anim_player.play(ANIM_CROUCH, ANIM_BLEND)
-			_anim_player.seek(0.0, true)
-		_anim_player.speed_scale = 0.0  # çömelmiş pozda bekle
+	elif move_mode == MoveMode.CROUCH and _anim_player.has_animation(ANIM_CROUCH_IDLE):
+		# Olduğu yerde çömelme: durağan CrouchIdle (SurvivalistModel üretir). speed_scale=0 KULLANMA —
+		# AnimationPlayer geçişi (blend) de durur ve karakter Idle'da takılı kalır.
+		_set_anim(ANIM_CROUCH_IDLE, 1.0)
 	else:
 		# "Idle" varsa her zaman onu kullan (kütüphane initialize'dan sonra yüklenmiş olsa bile)
 		var idle: StringName = ANIM_IDLE if _anim_player.has_animation(ANIM_IDLE) else _idle_anim
@@ -284,8 +314,12 @@ func _update_leg_facing(step: Vector3, moving: bool, delta: float) -> void:
 	target = _leg_yaw + wrapf(target - _leg_yaw, -PI, PI)
 	_leg_yaw = wrapf(lerpf(_leg_yaw, target, 1.0 - exp(-LEG_TURN_SPEED * delta)), -PI, PI)
 	_char_mesh.transform.basis = Basis(Vector3.UP, _leg_yaw) * _mesh_base_basis
+	# Nişan düzeltmesi: tüfek namlusu nişan yönüne bakana kadar omurgayı yumuşakça çevir (HandRifle ölçer).
+	# Mixamo nişan pozu tüfeği gövdenin ~60° soluna tutar → düzeltme ~-60°'ye oturur. Şarjör/bomba sırasında dondurulur.
+	if _hand_rifle and _hand_rifle.aim_valid and not (_upper and _upper.is_busy()):
+		_aim_corr = clampf(_aim_corr - _hand_rifle.aim_error * minf(AIM_CORR_GAIN * delta, 1.0), -MAX_AIM_CORR, MAX_AIM_CORR)
 	if _spine_twist:
-		_spine_twist.twist = clampf(-_leg_yaw, -MAX_SPINE_TWIST, MAX_SPINE_TWIST)
+		_spine_twist.twist = clampf(-_leg_yaw + _aim_corr, -MAX_SPINE_TWIST - MAX_AIM_CORR, MAX_SPINE_TWIST + MAX_AIM_CORR)
 
 
 func _reset_leg_facing() -> void:
@@ -310,9 +344,61 @@ func _equip_default_weapon() -> void:
 		current_weapon.ammo_changed.connect(
 			func(cur: int, tot: int, rel: bool): emit_signal("ammo_changed", cur, tot, rel)
 		)
+		# Şarjör değişimi başladı → herkese Reload animasyonu
+		current_weapon.ammo_changed.connect(func(_c: int, _t: int, rel: bool) -> void:
+			if rel:
+				_broadcast_action(Action.RELOAD))
+	# Atış her peer'da tetiklenir (_spawn_bullet call_local) → ateş pozu
+	current_weapon.fired.connect(_on_weapon_fired)
 	current_weapon.configure(WEAPON_CONFIGS.get(character_type, WEAPON_CONFIGS["Visioner"]))
 	_add_render_layer(current_weapon, BODY_LIGHT_LAYER_BIT)
 	_disable_shadow_casting(current_weapon)
+	# Üst gövde taban pozu: tüfek nişanda
+	if _upper and _anim_player and _anim_player.has_animation(ANIM_AIM):
+		_upper.set_base(_anim_player.get_animation(ANIM_AIM))
+
+
+# ─────────────────────────────────────────────
+# Üst gövde aksiyonları + tüfek görseli
+# ─────────────────────────────────────────────
+
+func _on_weapon_fired() -> void:
+	if _upper == null or _anim_player == null or is_dead:
+		return
+	var clip := ANIM_FIRE_WALK if _move_speed > ANIM_MOVE_THRESHOLD else ANIM_FIRE_STAND
+	if _anim_player.has_animation(clip):
+		var hold_time: float = FIRE_HOLD + (current_weapon.fire_rate if current_weapon else 0.0)
+		_upper.hold(_anim_player.get_animation(clip), hold_time)
+
+
+## Local oyuncu: aksiyonu herkese oynat (bağlı peer yoksa sadece kendine)
+func _broadcast_action(action: int) -> void:
+	if multiplayer.has_multiplayer_peer() and multiplayer.get_peers().size() > 0:
+		_action_rpc.rpc(action)
+	else:
+		_action_rpc(action)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func _action_rpc(action: int) -> void:
+	play_action(action)
+
+
+## Üst gövde aksiyonu (sadece görsel). Bomba fırlatmayı PowerupManager._bomb_rpc her peer'da çağırır.
+func play_action(action: int) -> void:
+	if _upper == null or _anim_player == null or is_dead:
+		return
+	match action:
+		Action.RELOAD:
+			if _anim_player.has_animation(ANIM_RELOAD):
+				_upper.play_once(_anim_player.get_animation(ANIM_RELOAD), current_weapon.reload_time if current_weapon else -1.0)
+		Action.TOSS:
+			if _anim_player.has_animation(ANIM_TOSS):
+				_upper.play_once(_anim_player.get_animation(ANIM_TOSS), TOSS_DURATION)
+		Action.HIT:
+			# Şarjör/bomba atma sürerken sarsılma onları bölmesin
+			if _anim_player.has_animation(ANIM_HIT) and not _upper.is_busy():
+				_upper.play_once(_anim_player.get_animation(ANIM_HIT), -1.0, 0.65)
 
 
 # ─────────────────────────────────────────────
@@ -484,6 +570,9 @@ func take_damage(amount: float, shooter_peer_id: int, source: int = DAMAGE_BULLE
 
 @rpc("any_peer", "call_local", "reliable")
 func _sync_health(new_health: float) -> void:
+	# Hasar aldı (ölmedi) → her peer'da sarsılma
+	if new_health < health and new_health > 0.0:
+		play_action(Action.HIT)
 	health = new_health
 	if is_local:
 		emit_signal("health_changed", health)
@@ -504,12 +593,17 @@ func _apply_death() -> void:
 	has_card = false
 	_death_token += 1
 	_reset_leg_facing()
+	if _upper:
+		_upper.set_enabled_smooth(false)  # tam gövde ölüm animasyonu
 	if _char_mesh:
-		if _anim_player and _anim_player.has_animation(ANIM_DEATH):
+		# Mixamo Dying (daha dramatik) varsa onu, yoksa UE Death
+		var death_clip := ANIM_DYING if _anim_player and _anim_player.has_animation(ANIM_DYING) else ANIM_DEATH
+		var rate := DYING_SPEED if death_clip == ANIM_DYING else 1.0
+		if _anim_player and _anim_player.has_animation(death_clip):
 			# Ölüm animasyonu oynar, bitince ceset gizlenir (arada respawn olursa gizleme iptal)
-			_anim_player.speed_scale = 1.0
-			_anim_player.play(ANIM_DEATH, ANIM_BLEND)
-			_hide_corpse_later(_death_token, _anim_player.get_animation(ANIM_DEATH).length + 0.6)
+			_anim_player.speed_scale = rate
+			_anim_player.play(death_clip, ANIM_BLEND)
+			_hide_corpse_later(_death_token, _anim_player.get_animation(death_clip).length / rate + 0.6)
 		else:
 			_char_mesh.visible = false
 	flashlight.visible = false
@@ -555,6 +649,8 @@ func _apply_respawn(spawn_pos: Vector3) -> void:
 	if _char_mesh:
 		_char_mesh.visible = true
 		_play_idle()
+	if _upper:
+		_upper.set_enabled_smooth(true)
 	collision_shape.disabled = false
 	flashlight.visible = true
 	body_light.visible = is_local

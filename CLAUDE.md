@@ -37,14 +37,26 @@ Tip varyasyonları: Button → `PrimaryButton`/`GhostButton`/`TabButton`, Label 
 | `send_chat(text, channel)` → `_chat_request` (any_peer) | ChatBox | host: gönderen = `get_remote_sender_id()` (0→1), flood koruması `CHAT_MIN_INTERVAL_MS`, `CHAT_MAX_LEN` kırpma, `"team"` ise sadece aynı takıma `_chat_receive` |
 | `_chat_system(text)` (host) | `register_player` ("katıldı"), `_on_peer_disconnected` ("ayrıldı") | `channel="system"` herkese |
 | `_chat_receive(msg)` (authority) | host → peer'lar | `chat_history`'ye ekler (max 60, sahne geçişinde korunur, `disconnect_all` temizler), `chat_received` sinyali |
+| `set_team_size(n)` / `set_map(id)` / `set_room_password(pw)` (host) | Lobby ODA AYARLARI | `room_settings` {map, team_size 2-5, has_password} → `_push_settings` → `_sync_room_settings` (call_local) → `room_settings_changed`. Takım küçülünce `_enforce_team_size` fazlaları takımsız yapar. Şifre değişince `_sync_password` (üyeler bilsin → migration) |
+| `get_team_size()` / `get_max_players()` (=4×size) / `get_map_info()` / `get_format_text()` / `get_room_status()` / `is_game_running()` | Lobby, MainMenu, GameManager, RoomManager | `MAPS` listesi (şimdilik sadece Labirent), format "3v3v3v3" |
 
-### Host migration akışı (`_on_server_disconnected`)
-1. `_saved_team_id` + `_migration_players` + `GameManager.get_migration_state()` snapshot alınır.
+**Host-tarafı kurallar:** `register_player` — oyun sürüyorsa (`is_game_running`) yeni katılım REDDEDİLİR ("Oyun devam ediyor"),
+oda doluysa ("Oda dolu"); istisna: migration penceresi (`_migration_window_until`, 20 s) içinde geri dönenler. `_change_team` takım
+boyutu sınırını uygular. Yeni katılana `_sync_room_settings.rpc_id` + herkese `_sync_peer_addresses` (client IP'leri).
+
+### Host migration akışı (`_on_server_disconnected`) — host oyundan çıksa/çökse de oyun devam eder
+1. Snapshot: `_saved_team_id`, `_saved_character`, `_migration_players`, `_migration_settings` (oda ayarları),
+   `_migration_addresses` (client IP'leri), `GameManager.get_migration_state()` (kart/kapı, skor, **oyuncu konumları ve
+   kill/ölüm istatistikleri isimle** — peer id'ler yeniden bağlanınca değişir).
 2. Kalan peer_id'ler sıralanır (host=1 hariç); **en küçük ID yeni host** olur.
-3. Yeni host: 0.3s bekle → `create_server()` (players.clear() önemli, bkz known_bugs #28) →
-   `host_migrated` sinyali → oyun `IN_GAME` ise `GameManager.restore_from_migration()`, değilse Lobby.tscn.
-4. Diğerleri: 1.5s bekle → `RoomManager.start_listening()` → `_reconnect_loop()` aynı `room_name`'i bulup `join_server()`.
+3. Yeni host: 0.3s bekle → `create_server()` (players.clear() önemli, bkz known_bugs #28) → karakter + oda ayarları geri,
+   `_migration_window_until` açılır → `host_migrated` → oyun `IN_GAME` ise `GameManager.restore_from_migration()`, değilse Lobby.tscn.
+   `restore_from_migration` tek-takım kontrolünü pencere bitince yapar (hemen yapınca oyun anında bitiyordu).
+4. Diğerleri: 1.5s bekle → **yeni host'un bilinen IP'sine doğrudan** `join_server()`; IP yoksa/başarısızsa
+   `RoomManager.start_listening()` → `_reconnect_loop()` (aynı `room_name`, LAN yayını). `_on_connection_failed` migration'da 3 kez yeniden dener.
+   `register_player(..., saved_team_id, saved_character)` → host `adopt_migrated_stats`.
 5. Kimse kalmadıysa → direkt Main.tscn.
+Test: 3 headless süreçle (host + 2 client, localhost) doğrulandı — yeni host + yeniden bağlanan oyunda kalır, karakter/konum korunur.
 
 **Sinyaller:** `server_created`, `joined_server`, `connection_failed`, `player_connected/disconnected`,
 `player_list_updated`, `kicked(reason)`, `host_migrated`, `chat_received(msg)`.
@@ -61,7 +73,7 @@ Tip varyasyonları: Button → `PrimaryButton`/`GhostButton`/`TabButton`, Label 
 |---|---|---|
 | `start_game()` | Lobby "Oyunu Başlat" (host) | `TeamManager.reset()` → `_start_game_rpc` → CharacterSelect sahnesi |
 | `check_all_characters_selected()` | `NetworkManager._apply_character_selection` | herkes seçtiyse `_begin_actual_game_rpc` |
-| `_begin_actual_game_rpc()` | kendi | Map.tscn yükle → `_spawn_local_player()` → host ise `_spawn_card_and_door()` → `game_started` sinyali |
+| `_begin_actual_game_rpc()` | kendi | `_get_map_scene()` (oda ayarındaki harita, `NetworkManager.MAPS`) yükle → `_spawn_local_player()` (migration'da `_pending_positions`'tan konum) → host ise `_spawn_card_and_door()` → `game_started` sinyali |
 | `_spawn_local_player()` | `_begin_actual_game_rpc`, `restore_from_migration` | Player instantiate, `initialize()`, `_notify_player_spawned.rpc()` broadcast, client ise `_request_active_players.rpc_id(1)` |
 | `handle_card_pickup(peer_id)` | `Card.gd._on_body_entered` (host) veya `request_card_pickup` RPC | `_apply_card_pickup_rpc` broadcast → `card_picked_up` sinyali |
 | `handle_card_drop(pos)` | ölüm sırasında taşıyıcı öldüyse, veya host | `_apply_card_drop_rpc` broadcast → `card_dropped` sinyali |
@@ -94,6 +106,8 @@ Client'lar sadece `request_*` RPC'leriyle host'a istek yollar.
 ## autoload/RoomManager.gd — LAN keşif + oda kodu
 
 - UDP broadcast port 7778, 2s aralık. Host `_send_broadcast()`, client `_receive_broadcasts()`.
+  Yayın: room_name/code, has_password, player_count + `NetworkManager.get_room_status()` (team_size, max_players, map_name,
+  state "lobby"/"game") → MainMenu oda satırında BEKLEMEDE/OYUNDA + format + harita çipleri, oyundaki odaya KATIL kapalı.
 - Oda kodu: host IPv4 → base-32 7 hane (`_ip_to_code`/`_code_to_ip`), alfabe `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (0/1/I/O yok).
 - `get_ip_for_code(code)`: önce keşfedilen listede ara, yoksa decode et, yoksa direkt IP kabul et (localhost testi).
 - `create_room()`/`stop_hosting()`/`start_listening()`/`stop_listening()` — NetworkManager tarafından çağrılır.
@@ -111,7 +125,8 @@ Player.gd modifier'ı `preload` ile yükler (global class cache'e bağımlı de�
 `_broadcast_state(pos, aim_y, mode)` ve `_interpolate_remote()` root `rotation.y` + hareket modu taşır/lerp eder.
 
 **Hareket modları** (`MoveMode`, `_update_move_mode`): **varsayılan WALK** (×0.55, `Walk`) / RUN (Shift + hareket, ×1.0, `Run`)
-/ CROUCH (Ctrl, ×0.35, `CrouchWalk`; dururken `speed_scale=0` donar). Dayanıklılık (sadece local, HUD okur):
+/ CROUCH (Ctrl, ×0.35, `CrouchWalk`; dururken `CrouchIdle` — SurvivalistModel `_get_crouch_idle` CrouchWalk'ın
+t=0 karesinden üretir). Dayanıklılık (sadece local, HUD okur):
 `sprint_stamina` (`SPRINT_MAX_TIME=4s`, dolum 5s) ve `crouch_stamina` (`CROUCH_MAX_TIME=3s`, dolum 4s); bırakınca
 `STAMINA_REGEN_DELAY` sonra dolar; tükenirse `*_locked` → `SPRINT_UNLOCK=0.4` / `CROUCH_UNLOCK=0.5`'e dolana kadar kullanılamaz
 (çömelmesi biten otomatik kalkar). Respawn'da `_reset_stamina()`. `Input.is_physical_key_pressed` — project.godot'ya eklenmedi.
@@ -134,7 +149,25 @@ import'ta "Textures/Body/... bulunamadı" hataları zararsız). `.import` ayarla
 FPS kolları (`ALWAYS_HIDDEN`) hep gizli. Animasyonlar `anims/survivalist_anims.res` (`tools/build_anim_library.gd` üretir):
 `Idle, Walk, Run, CrouchWalk, Talk, Jump, Death` (`anims/Basic+Demo+Animations/*.FBX` — aynı UE iskelet, doğrudan uyumlu;
 ik_* kemik, scale ve pelvis dışı position track'leri atılır) + yedek `Breathing Idle` (Mixamo bake, `tools/retarget_bake.gd`).
-`_setup_idle()` hepsini varsayılan kütüphaneye ekler, autoplay `Idle`. Kullanılmayan: Walk/CrouchWalk/Jump/Talk (mekanik yok).
+`_setup_idle()` hepsini varsayılan kütüphaneye ekler, autoplay `Idle`.
+Mixamo tüfek klipleri (`tools/build_anim_library.gd` → `tools/retarget_lib.gd` ile UE iskeletine bake, `MIXAMO_CLIPS`):
+`AimIdle` (rifle aiming idle), `FireStand` (NotWalkFire), `FireWalk` (WalkFiring Rifle), `Reload` (Reloading), `Toss`
+(toss grenade), `HitReact` (hit reaction), `Dying` (Dying). Kullanılmayan: strafe/backwards/turn (bacak-yönü sistemi
+gereksiz kılıyor), rifle run/walking (UE Walk/Run bacakları + AimIdle üst gövde aynı işi yapıyor), Jump/Talk/rifle jump.
+
+**Üst gövde katmanı** (Skeleton3D çocukları, sıra önemli: `UpperBodyLayer` → `SpineTwistModifier` → `HandRifle`):
+- `UpperBodyLayer.gd` (SkeletonModifier3D): AnimationPlayer bacakları oynatır; spine_01 ve altına (omurga kısmi ağırlık)
+  `set_base(AimIdle)` + aksiyon (`play_once` / `hold`) — `Animation.rotation_track_interpolate` ile doğrudan örnekler.
+  Ölüyken `set_enabled_smooth(false)` (tam gövde `Dying`, `DYING_SPEED=1.6`).
+- `HandRifle.gd`: prosedürel tüfek (`Player._build_rifle`, Weapon sahnesinde görsel yok) her kare sağ el → sol ele hizalanır;
+  sol el ayrılınca son tutuşu sağ ele göre korur. Sadece görsel (mermi Weapon/Muzzle'dan).
+  **Nişan düzeltmesi:** `aim_node`=Player root; her kare namlunun nişandan yatay sapmasını `aim_error` olarak ölçer →
+  `Player._update_leg_facing` `_aim_corr`'u integre eder (`AIM_CORR_GAIN`, ±`MAX_AIM_CORR`), SpineTwist'e eklenir.
+  Mixamo AimIdle tüfeği gövdenin ~59° soluna tutuyordu → düzeltme ~-59°'ye oturur, tüfek nişana paralel (sağ omuz, ~0.3 m sağda).
+  Reload/Toss sırasında (`_upper.is_busy()`) düzeltme donar.
+- Tetikleyiciler: `Weapon.fired` (her peer, `_spawn_bullet` call_local) → `_on_weapon_fired` (hareketliyse FireWalk, değilse FireStand,
+  `hold`); local şarjör başlayınca `_broadcast_action(RELOAD)` → `_action_rpc` (call_local); `_sync_health` düşüşü → HIT (her peer);
+  `PowerupManager._bomb_rpc(..., thrower)` → TOSS. `play_action(Action)` sadece görsel.
 
 | Fonksiyon | Ne zaman | Not |
 |---|---|---|
@@ -199,8 +232,12 @@ ik_* kemik, scale ve pelvis dışı position track'leri atılır) + yedek `Breat
   Kullanma: `Q` (`_unhandled_key_input`, sohbette değilken) → `_request_use(aim)` host:
   HEAL +60 (`_sync_health`), BOMB `_throw_bomb` (maks 12 m, duvara ışınla kırpılır) → `_bomb_rpc` (Bomb.gd görsel) +
   `_detonate_later` (r=4 m, 75→%35 düşüş, duvar arkası/dost/kendisi hasarsız, `take_damage(dmg, peer)` → kill kredisi),
-  INTEL_SAT/ENEMY_SAT → `_reveal_rpc(team, "objectives"/"enemies", 8/6 s)` → o takımda `reveal_until`, Minimap çizer;
-  düşmanlara "konumunuz tespit edildi" uyarısı. Sinyaller: `inventory_changed`, `reveal_started`, `notice` (HUD banner).
+  INTEL_SAT → `_reveal_rpc(team, "all_players", 8 s)`: Minimap TÜM oyuncuları çizer, kart/kapı GÖSTERİLMEZ; kart birinin
+  üzerindeyse o taşıyıcı sarı elmas+halka ile işaretlenir. ENEMY_SAT → `"enemies"` 6 s (sadece düşmanlar).
+  `reveal_until` o takımda; diğer takımlara "konumunuz tespit edildi" uyarısı.
+  **TEST MODU** (`TEST_MODE = OS.is_debug_build()` — editörden çalıştırınca açık, export'ta kapalı; host da debug olmalı):
+  F1 Bomba / F2 Sağlık / F3 Uydu / F4 Takım uydusu → `_request_test_give` (slotu değiştirir), F5 → `_request_test_spawn`
+  (önüne rastgele güç, 15 s ömür). HUD skor panelinin altında tuş hatırlatıcısı (`_setup_test_hint`). Sinyaller: `inventory_changed`, `reveal_started`, `notice` (HUD banner).
   Geç katılan client 1.5 s sonra `_request_sync`. HUD envanter slotu oyuncu kartının sağında.
 - **`WallLamps.gd`** (Map.tscn → `WallLamps` Node3D, çocukları `Lamp*` Marker3D — `tools/maze_lamps.py` üretir,
   32 adet, editörde taşınabilir): her marker'da armatür + emissive ampul + OmniLight (gölgesiz, r=6.5) +
@@ -219,13 +256,26 @@ ik_* kemik, scale ve pelvis dışı position track'leri atılır) + yedek `Breat
 
 - **MainMenu.gd**: UI tamamen kodla (tscn sadece kök). Sol: logo + operatör adı (`user://settings.cfg`'ye kaydedilir).
   Sağ: sekmeler `browse`/`create`/`code` (`_show_tab`; `RoomManager.start_listening` SADECE browse'da açık) + şifreli oda modalı.
-  Arka plan `MenuBackdrop.gdshader` (fareyi takip eden el feneri + ızgara). `NetworkManager.create_server/join_server`
+  Arka plan `MenuBackground3D` (aşağıda). `NetworkManager.create_server/join_server`
   çağırır, `server_created`/`joined_server`/`connection_failed`/`kicked` sinyallerini dinler.
-- **Lobby.gd**: UI tamamen kodla (tscn sadece kök), UITheme paleti + MenuBackdrop (ışık rengi kendi takımına döner).
-  Üst: oda adı, oyuncu sayısı, oda kodu + Kopyala (`DisplayServer.clipboard_set`). 4 takım kartı × `TEAM_SIZE=5` slot
-  (tıklanabilir → `request_change_team`; dolu/kendi takımı client tarafında engelli — host'ta takım limiti YOK).
+- **Lobby.gd**: UI tamamen kodla (tscn sadece kök), UITheme paleti + MenuBackground3D (fare feneri `light_color` kendi takımına döner).
+  Üst: oda adı, oyuncu sayısı, oda kodu + Kopyala (`DisplayServer.clipboard_set`). 4 takım kartı × `get_team_size()` slot,
+  kartlar içerik kadar yüksek (SHRINK_BEGIN) (tıklanabilir → `request_change_team`; sınır host'ta da uygulanır).
+  Başlıkta ayar özeti (`_settings_summary`: format · harita · şifre) + sağ üstte **⚙ butonu** → `_open_settings()`:
+  tam ekran modal (`_settings_modal`, `BlurBackdrop.gdshader` ile bulanık+karartılmış arka plan, dışına tıkla/✕/ESC kapatır)
+  içinde **ODA AYARLARI** kartı (`_build_settings_panel`). **TASLAK mantığı:** kontroller (harita/format OptionButton,
+  yeni şifre LineEdit, "Şifreyi kaldır" toggle) sadece taslağı değiştirir → `_update_draft_ui` farkı özetler ("Kaydedilince: …"),
+  **KAYDET** (`_on_save_settings`) hepsini birlikte `NetworkManager.set_*` ile uygular; **Kapat**/✕/ESC/dışına tıklama taslağı atar.
+  Açılışta `_load_draft` mevcut ayarlardan doldurur. Host dışı salt-okunur (KAYDET gizli). `_refresh_settings` sadece başlık özeti.
+  Alt: sohbet | takımsızlar + hazır/başlat.
   `_refresh_player_list()` → `player_list_updated`'e bağlı, takım seçmeyenler (team_id<0) alt şeritte.
   Hazır durumu local değişken değil `players[local]["is_ready"]`'den okunur. Start: `_are_teams_balanced()` + herkes ready.
+- **MenuBackground3D.gd** (SubViewportContainer, `preload(...).new()` — MainMenu + Lobby en alta ekler, üstüne `MenuOverlay.gdshader`
+  vinyeti): kendi World3D'li SubViewport; `MenuFloor.gdshader` ızgara zemin (lit, çizgiler ışıkta belirgin), `SOLDIER_COUNT=5`
+  Survivalist asker (`apply_outfit` farklı karakterler, Player ile aynı modifier zinciri UpperBodyLayer(AimIdle) → SpineTwist →
+  HandRifle + nişan düzeltmesi, `HandRifle.build_rifle_mesh()`), Walk/Idle, rastgele hedef + ara ara durup tarama + ayrışma,
+  her birinde SpotLight feneri (ilk 3'ü gölgeli) + küçük gövde ışığı. Fare: yukarıdan fareye bakan SpotLight (`light_color`).
+  **Not:** `set_anchors_and_offsets_preset` kullan — `set_anchors_preset` ofsetleri koruyup boyutu 0 bırakıyordu.
 - **Crosshair.gd** (HUD `_root`'a ekler): fare yerine nişangah, açıkken `MOUSE_MODE_HIDDEN` (`_exit_tree` geri açar).
   Boşluk = oyuncuya ekran mesafesi × tan(`weapon.spread_degrees`), atışta tepme, şarjör halkası (`reload_time`).
   Gizli: ölü / sohbete yazarken / `allowed=false` (HUD: pause/oyun sonu).
@@ -258,6 +308,8 @@ ik_* kemik, scale ve pelvis dışı position track'leri atılır) + yedek `Breat
 - Collision disable'ı physics callback içinde yaparken `set_deferred("disabled", true)`.
 - RPC çağırmadan önce `multiplayer.get_peers().size() > 0` kontrolü (bağlı peer yoksa hata).
 - Hasar/skor/kart gibi yetkili state değişiklikleri SADECE host'ta işlenir — host guard'ı unutma.
+- `AnimationPlayer.speed_scale = 0` pozu dondururken **geçişi (blend) de durdurur** → yeni animasyona hiç geçilmez.
+  Durağan poz gerekiyorsa ayrı tek-karelik döngü klibi kullan (ör. `CrouchIdle`).
 
 Detaylı "neden böyle yapıldı" gerekçeleri ve kronolojik bug geçmişi: auto-memory
 (`architecture_decisions.md`, `player_lighting.md`, `host_migration.md`, `known_bugs.md`).

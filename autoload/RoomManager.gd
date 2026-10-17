@@ -108,12 +108,15 @@ func get_ip_for_code(code: String) -> String:
 # ─────────────────────────────────────────────
 
 func _send_broadcast() -> void:
-	var data := JSON.stringify({
+	var info := {
 		"room_name":    room_name,
 		"room_code":    room_code,
 		"has_password": not room_password.is_empty(),
 		"player_count": NetworkManager.get_player_count(),
-	})
+	}
+	# Oda özellikleri: team_size, max_players, map_name, state ("lobby"/"game") — ana menü listesi gösterir
+	info.merge(NetworkManager.get_room_status())
+	var data := JSON.stringify(info)
 	_broadcast_sock.put_packet(data.to_utf8_buffer())
 
 
