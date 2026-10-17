@@ -1,1006 +1,374 @@
-# TacticalDark — Kod Dokümantasyonu
-**Hazırlayan:** Claude (AI)
-**Proje:** TacticalDark — 4 Takımlı Online 2D Nişancı
-**Motor:** Godot 4.6 / GDScript 2.0
+# TacticalDark — Teknik Dokümantasyon
+
+**Motor:** Godot 4.6+ / GDScript 2.0 · Forward+ renderer
+**Tür:** 3D top-down (yukarıdan, eğik kamera) taktik nişancı · 4 takım · LAN/online multiplayer (ENet)
+**İlgili dosyalar:** Oyunun amacı ve sanat/tasarım yönü için → [OYUN_TASARIM_DOKUMANI.md](OYUN_TASARIM_DOKUMANI.md).
+Fonksiyon/sinyal/RPC bağlantı haritası (geliştirici referansı) için → [CLAUDE.md](CLAUDE.md).
 
 ---
 
-## İÇİNDEKİLER
+## İçindekiler
 
-1. [Projeye Genel Bakış](#1-projeye-genel-bakış)
-2. [Klasör ve Dosya Yapısı](#2-klasör-ve-dosya-yapısı)
-3. [Temel Kavramlar (Okumadan Devam Etme)](#3-temel-kavramlar)
-4. [Autoload / Global Scriptler](#4-autoload--global-scriptler)
-   - 4.1 GameManager.gd
-   - 4.2 NetworkManager.gd
-   - 4.3 TeamManager.gd
-5. [Oyun Sahneleri](#5-oyun-sahneleri)
-   - 5.1 Main.gd
-   - 5.2 MainMenu.gd
-   - 5.3 Lobby.gd
-   - 5.4 HUD.gd
-   - 5.5 Map.gd
-6. [Oyuncu Sistemi](#6-oyuncu-sistemi--playergd)
-7. [Silah ve Mermi Sistemi](#7-silah-ve-mermi-sistemi)
-   - 7.1 Weapon.gd
-   - 7.2 Bullet.gd
-8. [Işık Sistemi](#8-ışık-sistemi--streetlampgd)
-9. [Ağ Mimarisi — Büyük Resim](#9-ağ-mimarisi--büyük-resim)
-10. [Oyunun Akışı (Baştan Sona)](#10-oyunun-akışı-baştan-sona)
-11. [Kritik Tasarım Kararları ve Nedenleri](#11-kritik-tasarım-kararları-ve-nedenleri)
-12. [Bilinen Sınırlamalar ve Gelecek Geliştirme Alanları](#12-bilinen-sınırlamalar-ve-gelecek-geliştirme-alanları)
+1. [Projeye genel bakış](#1-projeye-genel-bakış)
+2. [Klasör yapısı](#2-klasör-yapısı)
+3. [Temel kavramlar](#3-temel-kavramlar)
+4. [Global sistemler (autoload)](#4-global-sistemler-autoload)
+5. [Oyun akışı (baştan sona)](#5-oyun-akışı-baştan-sona)
+6. [Oyuncu sistemi](#6-oyuncu-sistemi)
+7. [Karakter modeli ve animasyon](#7-karakter-modeli-ve-animasyon)
+8. [Silah ve mermi](#8-silah-ve-mermi)
+9. [Harita, kart, kapı ve özel güçler](#9-harita-kart-kapı-ve-özel-güçler)
+10. [Işık ve görünürlük](#10-ışık-ve-görünürlük)
+11. [Arayüz (UI)](#11-arayüz-ui)
+12. [Ağ mimarisi ve host migration](#12-ağ-mimarisi-ve-host-migration)
+13. [Asset hattı ve araçlar (tools/)](#13-asset-hattı-ve-araçlar-tools)
+14. [Test ve hata ayıklama](#14-test-ve-hata-ayıklama)
+15. [Godot tuzakları](#15-godot-tuzakları)
+16. [Bilinen sınırlamalar ve yol haritası](#16-bilinen-sınırlamalar-ve-yol-haritası)
 
 ---
 
-## 1. Projeye Genel Bakış
+## 1. Projeye genel bakış
 
-TacticalDark, karanlık bir haritada el feneri ile görüş sağlayan, 4 takımlı (en fazla 20 oyuncu) gerçek zamanlı çevrimiçi bir 2D nişancı oyunudur. Oyun yukarıdan aşağıya (top-down) görünümdedir.
+TacticalDark, karanlık bir labirentte geçen 4 takımlı bir nişancı oyunudur. Harita neredeyse tamamen karanlıktır;
+oyuncular el feneriyle görür. Haritada bir **kart** ve bir **kapı** vardır: kartı alıp kapıya ulaştıran takım kazanır.
 
-**Temel özellikler:**
-- WASD ile hareket, mouse ile nişan alma ve ateş etme
-- El feneri (koni şeklinde ışık, mouse yönüne döner)
-- Sokak lambaları ve bina ışıkları ile çevre aydınlatması
-- 4 takım (Mavi, Kırmızı, Yeşil, Sarı) — her biri 5 oyuncuya kadar
-- İlk 30 öldürmeye ulaşan takım kazanır
-- ENet protokolü ile online multiplayer (Port 7777)
+| Özellik | Değer |
+|---|---|
+| Takım sayısı | 4 (Mavi, Kırmızı, Yeşil, Sarı) |
+| Takım boyutu | Oda ayarı: 2v2v2v2 – 5v5v5v5 (en fazla 20 oyuncu) |
+| Kazanma | Kartı kapıya teslim etmek (ya da tek takım kalması) |
+| Karakterler | Tank, Visioner, Runner, Sniper, Medic (takım içinde benzersiz) |
+| Ağ | ENet, port 7777 (oyun) + 7778 (UDP oda keşfi), host-otoriteli |
+| Ölüm | 3 sn sonra takım spawn noktasında yeniden doğma |
+
+**Kontroller**
+
+| Tuş | Eylem |
+|---|---|
+| WASD | Hareket (varsayılan yürüyüş) |
+| Shift | Koşu (dayanıklılık harcar) |
+| Ctrl | Çömelme (en fazla 3 sn, mermiler üstünden geçer) |
+| Fare | Nişan + el feneri yönü |
+| Sol tık | Ateş |
+| R | Şarjör değiştir |
+| Q | Envanterdeki özel gücü kullan |
+| Enter / T / Tab | Sohbet aç-gönder / takım sohbeti / kanal değiştir |
+| TAB | Skor tablosu |
+| ESC | Duraklatma menüsü |
+| F1–F5 | Test modu (sadece debug build) |
 
 ---
 
-## 2. Klasör ve Dosya Yapısı
+## 2. Klasör yapısı
 
 ```
-D:/Godot proje/
-│
-├── project.godot              ← Godot proje ayarları (GL Compatibility grafik modu)
-├── icon.svg                   ← Geçici oyuncu sprite (Godot robot logosu)
-│
-├── autoload/                  ← Her yerden erişilebilen global scriptler
-│   ├── GameManager.gd         ← Oyun durumu, sahne geçişleri, spawn/respawn
-│   ├── NetworkManager.gd      ← Ağ bağlantısı, lobi, oyuncu kaydı
-│   └── TeamManager.gd         ← 4 takım: renk, isim, puan, spawn noktaları
-│
+Godot-proje/
+├── project.godot                ← autoload sırası burada (değiştirirken editörü kapat)
+├── autoload/                    ← her sahneden erişilen global sistemler
+│   ├── GameManager.gd           ← oyun durumu, spawn, kart/kapı, ölüm/respawn, migration state
+│   ├── TeamManager.gd           ← takım renk/isim, skor, spawn noktaları
+│   ├── RoomManager.gd           ← LAN oda keşfi (UDP yayını), oda kodu
+│   └── NetworkManager.gd        ← ENet bağlantı, oyuncu kaydı, oda ayarları, sohbet, host migration
 ├── scenes/
-│   ├── main/
-│   │   ├── Main.tscn          ← Giriş noktası sahnesi
-│   │   └── Main.gd            ← Sadece MainMenu'ye yönlendirir
-│   │
-│   ├── ui/
-│   │   ├── MainMenu.tscn+gd   ← "Sunucu Kur" ve "Katıl" ekranı
-│   │   ├── Lobby.tscn+gd      ← Takım seçimi ve hazır olma ekranı
-│   │   └── HUD.tscn+gd        ← Oyun içi skor tablosu ve kazananı gösterir
-│   │
-│   ├── player/
-│   │   ├── Player.tscn        ← Oyuncu sahnesi (sprite, ışık, sağlık çubuğu)
-│   │   └── Player.gd          ← Hareket, nişan, ateş, hasar, ölüm, respawn
-│   │
-│   ├── weapons/
-│   │   ├── Weapon.tscn+gd     ← Silah: ateş hızı, mermi sayısı, şarj
-│   │   └── Bullet.tscn+gd     ← Mermi: hareket, çarpışma, hasar bildirimi
-│   │
-│   ├── lighting/
-│   │   ├── StreetLamp.tscn+gd ← Sokak lambası (titreme özellikli)
-│   │   └── BuildingLight.tscn ← Bina ışığı (script yok, editörde ayarlanır)
-│   │
-│   └── world/
-│       ├── Map.tscn           ← Harita (editörde kullanıcı tarafından yapılır)
-│       └── Map.gd             ← Spawn noktalarını TeamManager'a kaydeder
+│   ├── main/Main.tscn           ← giriş noktası → MainMenu
+│   ├── ui/                      ← MainMenu, Lobby, CharacterSelect, HUD, ChatBox, Crosshair,
+│   │                              Minimap, UITheme, MenuBackground3D + shader'lar
+│   ├── player/                  ← Player, SurvivalistModel, UpperBodyLayer, SpineTwistModifier, HandRifle
+│   ├── weapons/                 ← Weapon, Bullet
+│   └── world/                   ← Map, Card, Door, Powerup(+Manager), Bomb, WallLamps, ProximityReveal,
+│                                  CameraController
+├── asset model/                 ← Maze.obj (+ işlenmiş Maze_walls.obj, minimap), Survivalist modeli + dokular
+├── anims/                       ← UE/Mixamo animasyonları + üretilmiş survivalist_anims.res
+└── tools/                       ← asset dönüştürme ve animasyon bake script'leri (Python + GDScript)
+```
+
+**Kural:** Tüm menü/HUD arayüzleri **kodla** kurulur; `.tscn` dosyaları çoğunlukla sadece kök node içerir.
+Harita sahnesi (`Map.tscn`) ise editörde düzenlenir (spawn, kart/kapı, lamba ve güç noktaları Marker3D olarak).
+
+---
+
+## 3. Temel kavramlar
+
+- **Autoload:** Oyun boyunca yaşayan, her yerden adıyla erişilen script (`GameManager.start_game()`).
+  Sıra önemlidir: `GameManager → TeamManager → RoomManager → NetworkManager`.
+  Yeni ortak yardımcılar autoload yerine **`class_name` + statik fonksiyon** (ör. `UITheme`) ya da `preload` ile eklenir.
+- **Host / client:** Oyunu kuran (host, peer id = 1) hem sunucu hem oyuncudur. Hasar, kill, kart, skor, güçler gibi
+  tüm yetkili kararlar **sadece host'ta** işlenir (`if not NetworkManager.is_host(): return`).
+  Client'lar `request_*` RPC'leriyle istek yollar.
+- **RPC:** `rpc()` herkese, `rpc_id(1, …)` host'a, `call_local` kendinde de çalıştırır. Pozisyon `unreliable_ordered`
+  (20 Hz), önemli olaylar `reliable`.
+- **Sinyal:** Sistemler arası gevşek bağlantı. HUD, oyun mantığına dokunmaz; sadece sinyal dinler.
+
+---
+
+## 4. Global sistemler (autoload)
+
+### GameManager
+Durumlar: `MENU → LOBBY → CHARACTER_SELECT → IN_GAME → ENDED`.
+- `start_game()` (host) → herkes CharacterSelect'e geçer.
+- Herkes karakter seçince `_begin_actual_game_rpc` → oda ayarındaki harita yüklenir, her cihaz **kendi** oyuncusunu
+  spawn eder ve diğerlerine bildirir; host kartı ve kapıyı rastgele `CardPoints`/`DoorPoints` noktalarına koyar.
+- Kart alma/düşürme/teslim, ölüm (`handle_player_death`), 3 sn respawn, oyuncu ayrılınca temizlik ve
+  "tek takım kaldı" kontrolü.
+- `get_migration_state()` / `restore_from_migration()` — host değişince oyunun kaldığı yerden sürmesi.
+
+### TeamManager
+Takım renkleri/isimleri (index 0–3 sabit), kill skoru (bilgi amaçlı; kazanma koşulu kart/kapıdır),
+haritadan okunan spawn noktaları ve `get_spawn_position(team)` (küçük rastgele ofsetle).
+
+### RoomManager
+- Host her 2 sn'de UDP 7778'den oda bilgisini yayar: ad, kod, şifre, oyuncu sayısı, format, harita, durum (BEKLEMEDE/OYUNDA).
+- **Oda kodu:** host IPv4 adresinin 7 haneli base-32 kodu (karışan 0/1/I/O harfleri yok). Kodla katılırken çözülüp
+  adrese dönüştürülür; geçersiz kod ENet'e verilmeden reddedilir.
+
+### NetworkManager
+- `players` sözlüğü: `peer_id → {name, team_id, is_ready, character}`.
+- Oda ayarları (`room_settings`): harita, takım boyutu (2–5), şifre var/yok. Host değiştirir, herkese senkronlanır;
+  takım küçülürse fazla oyuncular takımsız kalır.
+- Katılım kuralları: şifre kontrolü, oda doluysa veya oyun sürüyorsa red (migration sırasında geri dönenler hariç).
+- Sohbet: `HERKES` / `TAKIM` / `system` kanalları, flood koruması, uzunluk sınırı, son 60 mesaj geçmişi.
+- Host migration (bkz. bölüm 12).
+
+---
+
+## 5. Oyun akışı (baştan sona)
+
+```
+1. Main.tscn → MainMenu
+   Operatör adı gir (kaydedilir) → ODALAR (LAN listesi) / ODA KUR / KODLA KATIL
+
+2. Lobby
+   Takım kartına tıkla → takıma geç (kapasite = takım boyutu)
+   Host ⚙ ile oda ayarlarını açar (taslak → KAYDET ile uygulanır)
+   Herkes HAZIR + takımlar dengeli → host OYUNU BAŞLAT
+
+3. CharacterSelect
+   5 karakterden birini seç (takım arkadaşı aynısını seçemez) → herkes seçince harita yüklenir
+
+4. Oyun (IN_GAME)
+   Spawn → karanlıkta kartı ara → kartı al → kapıyı bul → teslim et
+   Ölünce kart yere düşer, 3 sn sonra yeniden doğarsın
+   Köşelerde kısa süreli özel güçler belirir (tek slot, Q ile kullan)
+
+5. Bitiş (ENDED)
+   Kartı teslim eden takım (veya son kalan takım) kazanır → ZAFER / YENİLGİ ekranı → Ana menü
 ```
 
 ---
 
-## 3. Temel Kavramlar
+## 6. Oyuncu sistemi
 
-Bu bölümü okumadan kod açıklamalarını tam anlayamazsınız.
+`scenes/player/Player.gd` (CharacterBody3D) — yerel oyuncu girişle, uzak oyuncular ağdan gelen durumla (lerp) hareket eder.
 
-### 3.1 Autoload Nedir?
+### Karakter değerleri
 
-Godot'ta bazı scriptler **her yerden erişilebilir** hale getirilir. Bu `autoload` sistemidir. `GameManager`, `NetworkManager`, `TeamManager` üçü de autoload'dur. Yani herhangi bir script bunlara `GameManager.start_game()` gibi doğrudan erişebilir. Oyun çalıştığı sürece bellekte kalırlar, sahne geçişlerinde silinmezler.
+| Karakter | Rol | Can | Hız | Hasar | Atış aralığı | Şarjör | Şarj | Saçılma | Menzil | Mod |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Tank | Ön hat | 150 | 5.5 | 22 | 0.10 s | 30 | 2.0 s | 3.0° | 45 m | Otomatik |
+| Visioner | Keşif | 100 | 8.0 | 18 | 0.09 s | 28 | 1.7 s | 2.5° | 35 m | Otomatik |
+| Runner | Hızlı sızma | 75 | 13.0 | 11 | 0.06 s | 40 | 1.2 s | 4.5° | 25 m | Otomatik |
+| Sniper | Uzun menzil | 80 | 7.0 | 120 | 0.50 s | 1 | 2.5 s | 0° | 130 m | Tek atış |
+| Medic | Destek | 110 | 7.5 | 45 | 0.40 s | 7 | 2.0 s | 1.5° | 55 m | Tek atış |
 
-### 3.2 RPC (Remote Procedure Call) Nedir?
+Değerler `Player.gd` içindeki `CHARACTER_STATS` ve `WEAPON_CONFIGS`, seçim ekranındaki gösterim `CharacterSelect.gd`'dedir.
 
-RPC, bir bilgisayarın ağ üzerindeki başka bir bilgisayarda fonksiyon çalıştırmasıdır. Örneğin host, bütün clientlara "oyuncu öldü, sprite'ı griye boyayın" demek istediğinde `_apply_death.rpc()` çağırır — bu fonksiyon **tüm bağlı cihazlarda** otomatik olarak çalışır.
+### Hareket modları
 
-**RPC türleri bu projede:**
-| Tür | Ne Zaman Kullanılır |
-|-----|---------------------|
-| `rpc()` | Tüm bağlı cihazlara gönder |
-| `rpc_id(1, ...)` | Sadece sunucuya (host) gönder (id=1 her zaman host'tur) |
-| `rpc_id(peer_id, ...)` | Sadece belirli bir oyuncuya gönder |
-| `call_local` | RPC + kendi cihazında da hemen çalıştır |
-| `reliable` | Paket kaybolursa tekrar gönder (önemli veriler için) |
-| `unreliable_ordered` | En hızlı, kayıplar önemli değil (pozisyon güncellemeleri için) |
+| Mod | Tuş | Hız çarpanı | Animasyon | Sınır |
+|---|---|---|---|---|
+| Yürüme | (varsayılan) | ×0.55 | Walk | — |
+| Koşu | Shift | ×1.0 | Run | 4 sn dayanıklılık, 5 sn'de dolar |
+| Çömelme | Ctrl | ×0.35 | CrouchWalk / CrouchIdle | 3 sn, 4 sn'de dolar |
 
-### 3.3 Host / Client Farkı
+Dayanıklılık tükenirse belirli bir seviyeye dolana kadar kilitlenir. **Çömelmiş oyuncuya mermi işlemez**
+(mermi üstünden geçer); bomba patlaması ise çömelmeyi umursamaz.
 
-Bu oyun **listen server** mimarisindedir: oyunu kuran kişi (host) hem sunucu hem oyuncu olarak çalışır. Diğerleri client'tır.
+### Dönüş mimarisi
+Player kökü fareye (nişana) döner; el feneri ve silah onunla birlikte döner. Karakter modeli ise hareket ederken
+**bacaklarını hareket yönüne** çevirir, omurga modifier'ı üst gövdeyi nişana geri büker (en fazla ~110°).
+Böylece geri geri yürürken bile animasyon doğal kalır.
 
-- **Host'un id'si her zaman 1'dir**
-- `multiplayer.is_server()` → "Ben host miyim?" sorusunun cevabı
-- `multiplayer.get_unique_id()` → "Benim id'm ne?"
-
-### 3.4 Signal (Sinyal) Nedir?
-
-Bir script başka bir scripte "şu olay oldu" demek istediğinde signal kullanır. Örneğin `TeamManager`, 30. öldürme yapıldığında `team_won` sinyalini yayar. `GameManager` bu sinyale bağlıdır ve oyunu bitirir. Sinyaller scriptler arasında gereksiz bağımlılığı önler.
-
-### 3.5 Authority (Yetki) Kavramı
-
-Her oyuncu node'unun bir "sahibi" vardır. O node'un hareketi, durumu sadece sahibi tarafından kontrol edilir. `set_multiplayer_authority(peer_id)` ile atanır. Yetkisi olmayan biri o node'un `rpc("authority", ...)` fonksiyonlarını çağıramaz.
+### Hasar ve ölüm
+`take_damage(miktar, atan, kaynak)` sadece host'ta işlenir → can senkronlanır → 0 olursa ölüm RPC'si (Dying
+animasyonu, ışıklar/çarpışma kapanır), kart taşıyıcıysa kart düşer, 3 sn sonra respawn.
 
 ---
 
-## 4. Autoload / Global Scriptler
+## 7. Karakter modeli ve animasyon
 
-### 4.1 `GameManager.gd`
+- **Model:** `asset model/Survivalist/SK_Military_Survivalist.fbx` (Unreal mannequin iskeleti, 1.89 m).
+  Tüm karakterler aynı modeli kullanır; fark **kıyafet setinden** gelir (`SurvivalistModel.gd → OUTFITS`):
 
-**Rolü:** Oyun durumunu yönetir. Haritayı yükler, oyuncuları spawn eder, ölüm/respawn döngüsünü çalıştırır, oyun bitişini yönetir.
+  | Karakter | Kıyafet |
+  |---|---|
+  | Tank | Siyah ağır teçhizat: cepli yelek, sırt çantası, şapka, eldiven |
+  | Visioner | Orman yeşili, hafif yelek, çantasız |
+  | Runner | Teçhizatsız, yeleksiz, çıplak el |
+  | Sniper | Çöl/kum tonları, cepli yelek, çanta |
+  | Medic | Gri gömlek + zeytin yelek, sırt çantası (sağlık çantası) |
 
-**Durum makinesi (State Machine):**
-```
-MENU → LOBBY → IN_GAME → ENDED
-```
-`state` değişkeni her an oyunun hangi aşamada olduğunu tutar.
-
-**Önemli Değişkenler:**
-```gdscript
-var active_players: Dictionary
-# peer_id → Player node referansı
-# Tüm aktif oyuncuları takip eder
-# Örnek: { 1: <Player_1 node>, 34521: <Player_34521 node> }
-```
-
----
-
-**`start_game()` — Oyunu Başlat**
-```gdscript
-func start_game() -> void:
-    if not NetworkManager.is_host(): return   # Sadece host çalıştırabilir
-    TeamManager.reset()                        # Tüm skorları sıfırla
-    _start_game_rpc.rpc()                      # Tüm cihazlara "başla" komutu gönder
-```
-> ℹ️ Neden sadece host? Oyun mantığının tek bir yerden yönetilmesi gerekir. İki client aynı anda "başla" derse tutarsızlık çıkar.
+- **Malzemeler** koddan kurulur, dokular `asset model/Survivalist_Textures/` altındadır (normal map'ler DirectX → `invert_y`).
+- **Animasyon kütüphanesi:** `anims/survivalist_anims.res` (`tools/build_anim_library.gd` üretir).
+  UE "Basic Demo Animations": Idle, Walk, Run, CrouchWalk, Jump, Death. Mixamo tüfek klipleri UE iskeletine bake edilir:
+  AimIdle, FireStand, FireWalk, Reload, Toss, HitReact, Dying.
+- **Katmanlı animasyon** (Skeleton3D altında, sıra önemli):
+  1. `UpperBodyLayer` — bacaklar normal animasyonu oynarken üst gövdeye tüfek pozu + aksiyonlar (ateş, şarjör, bomba atma, darbe).
+  2. `SpineTwistModifier` — üst gövdeyi nişana çevirir.
+  3. `HandRifle` — prosedürel tüfeği iki ele hizalar, namlu sapmasını ölçüp omurga dönüşüne geri besler
+     (Mixamo pozundaki ~59° sola sapmayı düzeltir).
 
 ---
 
-**`_start_game_rpc()` — Her Cihazda Çalışan Başlatıcı**
-```gdscript
-@rpc("authority", "call_local", "reliable")
-func _start_game_rpc() -> void:
-    state = State.IN_GAME
-    get_tree().change_scene_to_packed(map_scene)  # Harita sahnesine geç
-    await get_tree().process_frame                 # 2 kare bekle (sahne yüklensin)
-    await get_tree().process_frame
-    _spawn_local_player()                          # Kendi oyuncunu oluştur
-    emit_signal("game_started")
-```
-> ℹ️ `await process_frame`: Sahne geçişi anlık değildir; Godot bunu sonraki karede uygular. İki kare beklenmezse spawn noktaları henüz yüklenmemiş olabilir.
+## 8. Silah ve mermi
+
+- `Weapon.try_shoot()` mermi/ateş hızı/şarjör kontrolü yapar, saçılma ekler ve `_spawn_bullet` RPC'si ile mermiyi
+  **her cihazda yerel** oluşturur (gecikme hissedilmez).
+- `Bullet._on_body_entered`:
+  1. Kendi mermisi → yok sayılır.
+  2. Takım arkadaşı → **dost ateşi yok**, mermi hasarsız yok olur.
+  3. Çömelmiş hedef → mermi geçip gider.
+  4. Diğer → **sadece atan oyuncunun cihazı** hasarı host'a bildirir (çift hasarı önler).
+- Eldeki tüfek görseldir; mermiler Weapon/Muzzle noktasından çıkar.
 
 ---
 
-**`_spawn_local_player()` — Kendi Oyuncunu Oluştur**
+## 9. Harita, kart, kapı ve özel güçler
 
-Her cihaz **sadece kendi oyuncusunu** oluşturur, ardından diğerlerine "ben spawn oldum" RPC'si gönderir.
+### Labirent haritası
+- Kaynak: `asset model/Maze.obj` → `tools/maze_convert.py` ile duvarlar ayrılır, ortalanır, ölçeklenir → `Maze_walls.obj`.
+- Ölçü: ~124 × 92 m ayak izi, koridor ~4 m, duvar ~2 m kalın ve 3 m yüksek, zemin 126 × 94 m.
+- Çarpışma `Map.gd` içinde mesh'ten (trimesh) otomatik üretilir. `Maze_minimap.png` (1 px = 1 m) minimap'te kullanılır.
+- `Map.tscn` içindeki işaretçiler: `SpawnPoints/Team0..3`, `CardPoints`, `DoorPoints`, `PowerupPoints` (33 köşe),
+  `WallLamps/Lamp*` (32 lamba).
 
-```gdscript
-func _spawn_local_player() -> void:
-    var local_id := NetworkManager.get_local_id()
-    var player_data := NetworkManager.players.get(local_id, {})
-    var team_id := player_data.get("team_id", 0)
-    var spawn_pos := TeamManager.get_spawn_position(team_id)
+### Kart ve kapı
+- Host oyun başında kartı ve kapıyı rastgele işaretçilere koyar.
+- Kart oyuncu üstüne yürüyünce alınır; taşıyıcı ölünce olduğu yere düşer.
+- Kart taşıyıcısı kapıya girerse takımı kazanır.
+- `ProximityReveal`: kart ve kapının ışığı/etiketi sadece yakına gelince görünür (kart 12→5 m, kapı 16→7 m).
+  Uzaktan yeri belli olmaz, aranması gerekir.
 
-    var player = player_scene.instantiate()
-    player.name = "Player_%d" % local_id          # Benzersiz isim
-    player.set_multiplayer_authority(local_id)     # Bu oyuncunun "sahibi" benim
-    get_tree().current_scene.add_child(player)
-    player.global_position = spawn_pos
-    player.initialize(local_id, team_id)
+### Özel güçler (PowerupManager)
+Host 8–15 sn arayla labirent köşelerinden birinde 5–10 sn ömürlü bir güç doğurur (aynı anda en fazla 3).
+Oyuncunun **tek slotluk** envanteri vardır; dolu slotla yeni güç alınamaz. Ölünce slot boşalır.
 
-    active_players[local_id] = player
-    _notify_player_spawned.rpc(local_id, team_id, spawn_pos)  # Diğerlerine bildir
-```
+| Güç | Etki |
+|---|---|
+| Bomba | Nişan yönüne en fazla 12 m atılır, 4 m yarıçap, merkezde 75 → kenarda ~%35 hasar. Duvar arkası, dost ve atan etkilenmez. Çömelme korumaz. |
+| Sağlık | +60 can |
+| Uydu | 8 sn minimapte **tüm oyuncular** görünür; kart ve kapı görünmez, ama kart birinin üzerindeyse taşıyıcı işaretlenir |
+| Takım uydusu | 6 sn sadece düşmanlar görünür |
 
----
-
-**`_notify_player_spawned()` — Başkasının Oyuncusunu Oluştur**
-
-Diğer cihazlardan "ben spawn oldum" mesajı geldiğinde kendi sahnemize o oyuncuyu ekleriz.
-
-```gdscript
-@rpc("any_peer", "call_local", "reliable")
-func _notify_player_spawned(peer_id, team_id, pos) -> void:
-    if peer_id == NetworkManager.get_local_id(): return  # Kendi spawn'ımız zaten var
-    if active_players.has(peer_id): return               # Zaten oluşturulmuş
-
-    var player = player_scene.instantiate()
-    player.set_multiplayer_authority(peer_id)   # Bu oyuncunun sahibi o peer
-    player.initialize(peer_id, team_id)
-    active_players[peer_id] = player
-```
+Uydu kullanılınca diğer takımlara "konumunuz tespit edildi" uyarısı gider.
 
 ---
 
-**`handle_player_death()` — Ölüm İşlemi (Sadece Host)**
+## 10. Işık ve görünürlük
 
-```gdscript
-func handle_player_death(dead_peer_id, killer_peer_id) -> void:
-    if not NetworkManager.is_host(): return
-    var killing_team = NetworkManager.players[killer_peer_id]["team_id"]
-    TeamManager.add_kill(killing_team)    # Öldüren takıma puan ekle
-    _schedule_respawn(dead_peer_id)       # 3 saniye sonra respawn planla
-```
-
----
-
-**`_schedule_respawn()` — Respawn Zamanlayıcı**
-
-```gdscript
-func _schedule_respawn(dead_peer_id) -> void:
-    await get_tree().create_timer(3.0).timeout   # 3 saniye bekle
-    var player = active_players.get(dead_peer_id)
-    var spawn_pos = TeamManager.get_spawn_position(team_id)
-    player.respawn(spawn_pos)   # player.respawn() içi RPC ile tüm cihazlara yayar
-```
-> ℹ️ `await`: Kodun bekleme sırasında bloklanmaması için. Diğer her şey çalışmaya devam eder, sadece bu satır 3 saniye bekler.
+- Ortam neredeyse tamamen karanlıktır. Her oyuncuda bir **el feneri** (SpotLight, ~26 m menzil) ve sadece kendi
+  gövdesini aydınlatan küçük bir **gövde ışığı** bulunur (render layer 20 ile zemine taşmaz).
+- Yerel oyuncu kendi karakterini bir **rim shader** (`SelfVisibility.gdshader`) ile her zaman görür; diğerleri bunu görmez.
+- **Duvar lambaları** (`WallLamps.gd`): 32 lamba, her client'ta aynı seed ile:
+  %55 sabit sodyum, %30 floresan gibi titreyen, %15 neredeyse sönük ("ölen" lamba). Huzme efekti `LightShaft.gdshader`.
+- Kamera (`CameraController.gd`) oyuncuyu yumuşak takip eder: ofset (0, 14, 12), eğim −50°.
 
 ---
 
-### 4.2 `NetworkManager.gd`
+## 11. Arayüz (UI)
 
-**Rolü:** ENet ağ bağlantısını kurar, oyuncuları kaydeder, takım değiştirme ve hazır olma mesajlarını yönetir.
+Ortak tema: `UITheme` (statik sınıf). Koyu lacivert-siyah yüzeyler, **el feneri sarısı vurgu** (`ACCENT`), takım renkleri.
+Buton tipleri: Primary / Ghost / Tab; etiket tipleri: Title / Caps / Dim.
 
-**Önemli Değişken:**
-```gdscript
-var players: Dictionary
-# peer_id → { "name": "Ali", "team_id": 2, "is_ready": true }
-# Lobideki ve oyundaki tüm oyuncuların bilgisi burada
-```
+| Ekran | İçerik |
+|---|---|
+| **MainMenu** | Logo, operatör adı, sekmeler (ODALAR / ODA KUR / KODLA KATIL), oda satırlarında format, harita ve durum çipleri, şifreli oda modalı |
+| **Lobby** | Oda adı/kodu (kopyala), 4 kompakt takım kartı, ⚙ oda ayarları modalı (bulanık arka plan, taslak → KAYDET/Kapat), sohbet, takımsızlar, HAZIR/BAŞLAT |
+| **CharacterSelect** | 5 karakter kartı, her birinde yakın plan 3D önizleme ve stat çubukları |
+| **HUD** | Skor (sol üst), hedef çipi ve uyarı bandı (üst orta), kill feed (sağ üst), oyuncu kartı + can/mermi/dayanıklılık + güç slotu (sol alt), minimap (sağ alt), hasar vinyeti, ölüm geri sayımı, TAB skor tablosu, ESC menüsü, oyun sonu ekranı |
+| **Crosshair** | Fare yerine nişangah: saçılmaya göre açılır, atışta tepir, şarjör halkası gösterir |
+| **ChatBox** | Lobide sürekli açık; oyunda sadece maç mesajları, her mesaj 4.5 sn görünüp söner |
 
----
-
-**`create_server()` — Sunucu Kur**
-
-```gdscript
-func create_server(player_name: String) -> void:
-    var peer := ENetMultiplayerPeer.new()
-    peer.create_server(PORT, MAX_PLAYERS)    # Port 7777, max 20 oyuncu
-    multiplayer.multiplayer_peer = peer      # Godot'un ağ sistemine bağla
-    players[1] = { "name": player_name, "team_id": -1, "is_ready": false }
-    emit_signal("server_created")
-```
-> ℹ️ Host'un id'si her zaman **1**'dir. Bu Godot ENet'in sabit bir kuralıdır.
+**Menü arka planı** (`MenuBackground3D.gd`): ana menü ve lobide ayrı bir 3D dünya. Karanlık ızgara zeminde 5 asker
+(farklı kıyafetlerle) fener ve tüfekle yavaşça devriye gezer, ara ara durup etrafa bakar. Fareyi yukarıdan takip eden
+bir fener vardır; lobide rengi oyuncunun takım rengine döner. Üstte vinyet shader'ı arayüzün okunmasını kolaylaştırır.
 
 ---
 
-**`join_server()` — Sunucuya Katıl**
+## 12. Ağ mimarisi ve host migration
 
-```gdscript
-func join_server(address, player_name) -> void:
-    var peer := ENetMultiplayerPeer.new()
-    peer.create_client(address, PORT)         # IP:Port'a bağlan
-    multiplayer.multiplayer_peer = peer
-    # Bağlantı başarılı olunca _on_connected_to_server() otomatik tetiklenir
-```
+### Kim neye karar verir?
 
----
+| Karar | Yetkili |
+|---|---|
+| Takım değişimi, hazır, oda ayarları, oyun başlatma | Host |
+| Hasar, ölüm, kill, kart, skor, güçler | Host |
+| Kendi oyuncusunun hareketi/nişanı | Her oyuncu kendisi (20 Hz yayın) |
+| Mermi hareketi ve görseli | Her cihaz yerel |
+| Lamba titremesi, yakınlık görünürlüğü, menü arka planı | Tamamen yerel görsel |
 
-**Bağlantı Olayları Zinciri (Client için):**
-
-```
-join_server() çağrılır
-    ↓
-ENet bağlantı kurar
-    ↓
-_on_connected_to_server() tetiklenir
-    ↓
-register_player.rpc_id(1, ...) → Host'a "Ben Ali'yim, id'm 34521" mesajı
-    ↓
-Host: register_player() çalışır, players listesine ekler
-    ↓
-Host: receive_player_list.rpc() → Herkese güncel listeyi gönder
-    ↓
-Tüm cihazlar: player_list_updated sinyali → Lobi ekranı güncellenir
-```
+### Host migration
+Host oyundan çıkarsa ya da oyunu çökerse oyun bitmez:
+1. Her client anlık durumu kaydeder: takım, karakter, oda ayarları, client IP'leri, kart/kapı konumu, skor,
+   oyuncu konumları ve istatistikleri (peer id yeniden bağlanınca değiştiği için isimle).
+2. Kalan en küçük peer id yeni host olur ve sunucuyu yeniden kurar.
+3. Diğerleri yeni host'un bilinen IP'sine doğrudan bağlanır (olmazsa LAN yayınından odayı bulur, 3 deneme).
+4. 20 sn'lik migration penceresinde geri dönenler oyuna kabul edilir; "tek takım kaldı" kontrolü bu pencere bitince yapılır.
 
 ---
 
-**`request_change_team()` — Takım Değiştir**
+## 13. Asset hattı ve araçlar (tools/)
 
-```gdscript
-func request_change_team(team_id: int) -> void:
-    var my_id := multiplayer.get_unique_id()
-    if multiplayer.is_server():
-        _change_team(my_id, team_id)          # Host: direkt çalıştır
-    else:
-        _change_team.rpc_id(1, my_id, team_id)  # Client: host'a gönder
-```
-> ℹ️ Neden host'a gönderilir? Tüm oyun mantığı host'ta merkezi olarak işlenir. Client kendi kendine "takım değiştirdim" diyemez.
+| Araç | Ne yapar |
+|---|---|
+| `maze_convert.py` | Maze.obj → duvar mesh'i (ortalama, ölçek, yükseklik, düz normal) |
+| `maze_points.py` | Spawn/kart/kapı noktaları + minimap PNG |
+| `maze_corners.py` | Özel güç noktaları (köşeler) |
+| `maze_lamps.py` | Duvar lambası işaretçileri |
+| `build_anim_library.gd` | UE + Mixamo animasyonlarından `survivalist_anims.res` üretir |
+| `retarget_lib.gd` / `retarget_bake.gd` | Mixamo → UE iskeleti retarget/bake |
 
----
+Orijinal asset'ler değiştirilmez; üretilen dosyalar script'le yeniden oluşturulur.
 
-**`_check_all_ready()` — Herkes Hazır mı?**
-
-```gdscript
-func _check_all_ready() -> void:
-    if players.size() < 2: return       # En az 2 oyuncu gerekir
-    for p in players.values():
-        if not p["is_ready"]: return    # Biri bile hazır değilse dur
-    GameManager.start_game()            # Herkes hazırsa oyunu başlat
-```
+**Yeni karakter modeli eklenecekse:** UE mannequin uyumlu iskelet en kolay yoldur (mevcut tüm animasyonlar doğrudan çalışır).
+Farklı iskelette retarget araçları uyarlanmalıdır. Detaylı teknik şartlar → OYUN_TASARIM_DOKUMANI.md, bölüm 9.
 
 ---
 
-### 4.3 `TeamManager.gd`
+## 14. Test ve hata ayıklama
 
-**Rolü:** 4 takımın renk, isim ve puan bilgisini tutar. Spawn noktalarını yönetir.
-
-**Sabitler:**
-```gdscript
-const MAX_SCORE := 30       # Kazanmak için gereken öldürme sayısı
-
-const TEAM_COLORS = [
-    Color(0.2, 0.6, 1.0),   # Takım 0 — Mavi
-    Color(1.0, 0.3, 0.3),   # Takım 1 — Kırmızı
-    Color(0.3, 0.9, 0.3),   # Takım 2 — Yeşil
-    Color(1.0, 0.85, 0.1),  # Takım 3 — Sarı
-]
-```
+- **Test modu** (debug build'de otomatik açık): F1 Bomba, F2 Sağlık, F3 Uydu, F4 Takım uydusu verir; F5 önüne rastgele güç doğurur.
+- **Çoklu oyuncu testi:** Aynı makinede birden fazla Godot penceresi açılıp `localhost` / oda koduyla bağlanılabilir.
+  Host migration 3 süreçle (host + 2 client) doğrulanmıştır.
+- Headless script testi: `Godot.exe --path . --script <script.gd>`.
 
 ---
 
-**`add_kill()` — Öldürme Ekle ve Kazanmayı Kontrol Et**
+## 15. Godot tuzakları
 
-```gdscript
-func add_kill(killing_team: int) -> void:
-    scores[killing_team] += 1
-    emit_signal("score_updated", killing_team, scores[killing_team])
-    if scores[killing_team] >= MAX_SCORE:
-        emit_signal("team_won", killing_team)
-```
-
-Bu sinyal → `GameManager._on_team_won()` → `_end_game_rpc.rpc()` → Tüm cihazlarda oyun biter.
-
----
-
-**`get_spawn_position()` — Rastgele Spawn Noktası Al**
-
-```gdscript
-func get_spawn_position(team_id: int) -> Vector2:
-    var points := spawn_points.get(team_id, [])
-    return points[randi() % points.size()]   # 5 noktadan birini rastgele seç
-```
+- `Object.get(key)` tek argüman alır (Dictionary.get gibi varsayılan değer yok).
+- Float için `absf/clampf/minf/maxf` kullan.
+- `_ready()` içinde sahne değiştirme → `change_scene_to_file.call_deferred(...)`.
+- `global_position` ayarlamadan önce node ağaca eklenmiş olmalı.
+- `queue_free()` sonrası `is_instance_valid()` ile kontrol et.
+- Fizik callback'inde collision kapatmak → `set_deferred("disabled", true)`.
+- Bağlı peer yokken RPC çağırma.
+- `AnimationPlayer.speed_scale = 0` geçişi de dondurur → durağan poz için ayrı klip kullan.
+- Tam ekran Control için `set_anchors_and_offsets_preset` (sadece `set_anchors_preset` boyutu 0 bırakabilir).
+- Birden fazla SubViewport önizlemesinde `own_world_3d = true` şart.
+- Container'lar çocukların scale'ini sıfırlar.
+- Editör açıkken `project.godot`'ya autoload ekleme → `class_name` statik sınıf kullan.
 
 ---
 
-**`register_spawn_points()` — Haritadan Spawn Noktalarını Kaydet**
-
-Map.gd tarafından çağrılır. Haritadaki `Marker2D` node'larının pozisyonlarını buraya kaydeder.
-
----
-
-## 5. Oyun Sahneleri
-
-### 5.1 `Main.gd`
-
-Oyunun başlangıç sahnesi. Tek satır işi var: MainMenu sahnesine geç.
-
-```gdscript
-func _ready() -> void:
-    get_tree().change_scene_to_file.call_deferred("res://scenes/ui/MainMenu.tscn")
-```
-> ℹ️ `call_deferred`: `_ready()` fonksiyonu içinde sahne değiştirmek Godot'ta hataya yol açar. `call_deferred` komutu "bu frame bittikten sonra çalıştır" anlamına gelir.
-
----
-
-### 5.2 `MainMenu.gd`
-
-**Arayüz Elemanları:**
-- `NameInput` — Oyuncu ismi
-- `IPInput` — Bağlanılacak sunucu IP'si
-- `HostButton` — Sunucu kur
-- `JoinButton` — Sunucuya katıl
-- `StatusLabel` — Durum mesajı
-
-**Akış:**
-```
-Host butonu basılır
-    → NetworkManager.create_server()
-    → server_created sinyali
-    → Lobby sahnesine geç
-
-Join butonu basılır
-    → NetworkManager.join_server(ip, isim)
-    → joined_server sinyali (bağlantı başarılıysa)
-    → Lobby sahnesine geç
-
-Bağlantı başarısız
-    → connection_failed sinyali
-    → "Bağlantı başarısız!" mesajı göster
-```
-
----
-
-### 5.3 `Lobby.gd`
-
-Oyuncuların takım seçtiği ve hazır olduğu ekran.
-
-**Arayüz Elemanları:**
-- Sol panel: Oyuncu listesi (isim, takım, hazır durumu)
-- Sağ panel: 4 takım butonu + Hazır butonu + Başlat butonu (sadece host görür)
-
-**`_refresh_player_list()` — Listeyi Güncelle**
-
-`player_list_updated` sinyali her geldiğinde tüm etiketleri silip yeniden oluşturur:
-```
-Ali — Mavi ✓
-Veli — Kırmızı
-Ayşe — Yeşil ✓
-```
-
-**`_on_ready_btn_pressed()` — Hazır / Hazır Değil Geçiş**
-
-```gdscript
-func _on_ready_btn_pressed() -> void:
-    is_ready = not is_ready                     # Tersine çevir
-    ready_btn.text = "Hazır DEĞİL" if is_ready else "Hazır"
-    NetworkManager.set_ready(is_ready)          # Sunucuya bildir
-```
-
-**Başlat butonu (sadece host):** Tüm oyuncular hazırsa aktif olur. Basınca `GameManager.start_game()` çağrılır.
-
----
-
-### 5.4 `HUD.gd`
-
-Oyun içi arayüz. `CanvasLayer` olduğu için kamera hareket etse bile ekranda sabit kalır.
-
-**Elemanlar:**
-- `score_labels[0..3]` — 4 takım için puan etiketleri (renklendirilmiş)
-- `end_panel` — Oyun bitince açılan panel
-- `winner_label` — Kazanan takım ismi
-- `back_btn` — Ana menüye dön
-
-**Sinyal Bağlantıları:**
-```gdscript
-TeamManager.score_updated → _refresh_scores()     # Puan değişince güncelle
-GameManager.game_ended → _on_game_ended()         # Oyun bitince paneli göster
-```
-
----
-
-### 5.5 `Map.gd`
-
-Haritanın script'i. Editörde yapılan haritadaki spawn noktalarını koda aktarır.
-
-**Beklenen Node Yapısı (Map.tscn içinde):**
-```
-Map (Node2D)
-└── SpawnPoints (Node2D)
-    ├── Team0 (Node2D)
-    │   ├── Marker2D  ← spawn noktası 1
-    │   ├── Marker2D  ← spawn noktası 2
-    │   └── ...       ← (5 adet önerilir)
-    ├── Team1 (Node2D)
-    ├── Team2 (Node2D)
-    └── Team3 (Node2D)
-```
-
-**`_register_spawn_points()` — Spawn Noktalarını Kaydet**
-
-```gdscript
-func _register_spawn_points() -> void:
-    for team_id in range(4):
-        var team_node = spawn_root.get_node_or_null("Team%d" % team_id)
-        var points: Array[Vector2] = []
-        for child in team_node.get_children():
-            if child is Marker2D:
-                points.append(child.global_position)
-        TeamManager.register_spawn_points(team_id, points)
-```
-
-> ℹ️ `get_node_or_null`: Node bulunamazsa null döner, hata vermez. Ardından uyarı mesajı gösterilir.
-
----
-
-## 6. Oyuncu Sistemi — `Player.gd`
-
-Bu projenin en karmaşık scripti. Yerel oyuncu ile uzak oyuncuları farklı şekilde yönetir.
-
-### 6.1 Node Yapısı (Player.tscn)
-
-```
-Player (CharacterBody2D)          ← Fizik + hareket
-├── Sprite2D                      ← Görsel (icon.svg)
-├── CollisionShape2D              ← Çarpışma şekli
-├── Flashlight (PointLight2D)     ← El feneri
-├── HealthBar (ProgressBar)       ← Sağlık çubuğu
-├── NameLabel (Label)             ← Oyuncu ismi
-└── WeaponHolder (Node2D)         ← Silahı döndürmek için kap
-    └── Weapon                    ← Silah (dinamik eklenir)
-```
-
-### 6.2 Değişkenler
-
-```gdscript
-var peer_id: int       # Bu oyuncunun ağ kimliği
-var team_id: int       # Hangi takımda (0-3)
-var is_local: bool     # Bu cihazın oyuncusu mu?
-var is_dead: bool      # Şu an ölü mü?
-var health: float      # Mevcut can (0-100)
-
-# Ağ senkronizasyonu için hedef değerler (uzak oyuncular için)
-var _target_position: Vector2
-var _target_weapon_rotation: float
-var _target_flashlight_rotation: float
-
-const SYNC_RATE: float = 0.05   # 0.05 saniye = saniyede 20 güncelleme
-```
-
-### 6.3 `initialize()` — Oyuncuyu Hazırla
-
-Spawn anında çağrılır. Hem yerel hem uzak oyuncular için ilk ayarları yapar.
-
-```gdscript
-func initialize(p_peer_id, p_team_id) -> void:
-    peer_id = p_peer_id
-    team_id = p_team_id
-    is_local = (p_peer_id == NetworkManager.get_local_id())
-    modulate = TeamManager.get_color(team_id)     # Sprite'ı takım rengine boya
-    flashlight.texture = _make_flashlight_texture()
-
-    if is_local:
-        # Yerel oyuncu sprite'ı karanlıktan etkilenmesin
-        var mat := CanvasItemMaterial.new()
-        mat.light_mode = CanvasItemMaterial.LIGHT_MODE_UNSHADED
-        sprite.material = mat
-
-        # Kamera ekle (sadece yerel oyuncuya kamera bağlanır)
-        var cam := Camera2D.new()
-        cam.zoom = Vector2(1.5, 1.5)
-        add_child(cam)
-
-    _equip_default_weapon()
-```
-
-> ℹ️ `LIGHT_MODE_UNSHADED`: Işık hesaplamasından muaf tutar. Yani harita karanlık olsa bile kendi oyuncunuzu her zaman görürsünüz. Diğer oyuncular normal görünür (karanlıkta silik).
-
-### 6.4 Fizik Döngüsü — `_physics_process()`
-
-Her frame (kare) çalışır. Yerel ve uzak oyuncuları farklı işler.
-
-```gdscript
-func _physics_process(delta: float) -> void:
-    if is_dead: return
-    if is_local:
-        _handle_local_input(delta)    # Klavye/mouse ile hareket
-    else:
-        _interpolate_remote(delta)    # Ağdan gelen pozisyona yumuşak geçiş
-```
-
-### 6.5 `_handle_local_input()` — Yerel Giriş
-
-```gdscript
-func _handle_local_input(delta) -> void:
-    # WASD hareketi
-    var dir := Vector2.ZERO
-    if Input.is_action_pressed("move_up"):    dir.y -= 1
-    if Input.is_action_pressed("move_down"):  dir.y += 1
-    if Input.is_action_pressed("move_left"):  dir.x -= 1
-    if Input.is_action_pressed("move_right"): dir.x += 1
-    velocity = dir.normalized() * speed   # Köşegen harekette hız normalleştirilir
-    move_and_slide()                      # Duvarlara çarparak kayarak git
-
-    # Mouse yönüne bak
-    weapon_holder.look_at(get_global_mouse_position())
-    flashlight.look_at(get_global_mouse_position())
-
-    # Ateş et
-    if Input.is_action_pressed("shoot") and current_weapon:
-        current_weapon.try_shoot(peer_id, team_id)
-
-    # Ağ senkronizasyonu: her 0.05 saniyede bir pozisyonu yayınla
-    _sync_timer += delta
-    if _sync_timer >= SYNC_RATE:
-        _sync_timer = 0.0
-        if multiplayer.get_peers().size() > 0:
-            _broadcast_state.rpc(global_position, weapon_holder.rotation, flashlight.rotation)
-```
-
-### 6.6 `_interpolate_remote()` — Uzak Oyuncu Yumuşatma
-
-Uzak oyuncular "ışınlanma" yerine yumuşak hareket eder.
-
-```gdscript
-func _interpolate_remote(delta) -> void:
-    var t: float = minf(delta * 20.0, 1.0)    # Yumuşatma faktörü
-    global_position = global_position.lerp(_target_position, t)
-    # lerp: iki değer arasında belirli bir oranda geçiş yapar
-    # Örn: mevcut pos ile hedef pos arası %t'lik noktası
-```
-
-> ℹ️ Pozisyon verisi ağda saniyede 20 kez gelir ama oyun genelde 60 FPS çalışır. `lerp` ile her frame arasında yumuşak animasyon yaratılır.
-
-### 6.7 `_broadcast_state()` — Pozisyon Yayını
-
-```gdscript
-@rpc("any_peer", "unreliable_ordered")   # Hızlı, sıralı, kaybı önemli değil
-func _broadcast_state(pos, weapon_rot, flash_rot) -> void:
-    if is_local: return                  # Kendi pozisyonumuzu güncellemeyiz
-    _target_position = pos
-    _target_weapon_rotation = weapon_rot
-    _target_flashlight_rotation = flash_rot
-```
-
-### 6.8 Hasar Sistemi — `take_damage()`
-
-**Kural:** Sadece sunucu (host) hasar hesaplar.
-
-```gdscript
-@rpc("any_peer", "reliable")
-func take_damage(amount, shooter_peer_id) -> void:
-    if not NetworkManager.is_host(): return    # Client'ta çalışmaz
-    if is_dead: return                         # Zaten ölüyse atla
-
-    health -= amount
-    health = clamp(health, 0.0, max_health)
-    _sync_health.rpc(health)                   # Yeni canı herkese bildir
-
-    if health <= 0.0:
-        _die(shooter_peer_id)
-```
-
-### 6.9 Ölüm ve Respawn Zinciri
-
-```
-Bullet çarpışır
-    ↓
-Bullet: take_damage.rpc_id(1, ...) → Host'a hasar bildir
-    ↓
-Host: take_damage() çalışır, can azalır
-Host: _sync_health.rpc() → Herkes canı günceller
-Host: can <= 0 → _die() çağrılır
-    ↓
-_die():
-    _apply_death.rpc()         → Tüm cihazlarda sprite grileşir, çarpışma kapanır
-    GameManager.handle_player_death() → Puan eklenir, 3 saniye sayar
-    ↓
-3 saniye sonra:
-GameManager: player.respawn(spawn_pos) çağrılır
-    ↓
-respawn():
-    _apply_respawn.rpc(spawn_pos)  → Tüm cihazlarda can doldu, konum değişti
-```
-
-### 6.10 El Feneri Texture — `_make_flashlight_texture()`
-
-Kod ile 256x256 piksel bir koni şekli oluşturur. Her piksel için iki hesap:
-- **`cone`**: Mouse yönünden ne kadar sapıyor? (±50 derece dışı siyah)
-- **`fade`**: Merkeze ne kadar uzak? (uzaklaştıkça solar)
-
-```gdscript
-static func _make_flashlight_texture() -> ImageTexture:
-    var size := 256
-    var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
-    for x in range(size):
-        for y in range(size):
-            var dir := Vector2(x, y) - Vector2(size*0.5, size*0.5)
-            var dist := dir.length() / (size * 0.5)
-            var angle := absf(dir.angle())                        # Sağa bakan koni
-            var cone := clampf(1.0 - angle / (PI * 0.28), 0.0, 1.0)
-            var fade := clampf(1.0 - dist, 0.0, 1.0)
-            var alpha := pow(cone, 2.5) * pow(fade, 1.2)         # Yumuşak geçiş
-            img.set_pixel(x, y, Color(1.0, 0.97, 0.88, alpha))   # Sarımsı beyaz
-    return ImageTexture.create_from_image(img)
-```
-
-> ℹ️ Bu texture bir kez oluşturulur (`static func` olduğu için tüm oyuncular aynı texture'ı paylaşır). Her oyuncu için ayrı texture oluşturulması gerekmez.
-
----
-
-## 7. Silah ve Mermi Sistemi
-
-### 7.1 `Weapon.gd`
-
-**Ayarlanabilir Özellikler (`@export` — editörden değiştirilebilir):**
-
-| Değişken | Varsayılan | Açıklama |
-|----------|-----------|----------|
-| `damage` | 25.0 | Her mermi kaç can alır |
-| `fire_rate` | 0.15 sn | Atışlar arası minimum süre |
-| `bullet_speed` | 600.0 | Mermi hızı (piksel/saniye) |
-| `max_ammo` | 30 | Şarjör kapasitesi |
-| `reload_time` | 1.8 sn | Yeniden şarj süresi |
-| `spread_degrees` | 2.0° | Namlu sapması (mermi düz gitmez) |
-
----
-
-**`try_shoot()` — Ateş Et**
-
-```gdscript
-func try_shoot(shooter_peer_id, shooter_team_id) -> void:
-    # Engeller: şarj ediliyor, mermi bitti, ateş hızı bekleniyor
-    if is_reloading or current_ammo <= 0 or not fire_timer.is_stopped():
-        return
-
-    current_ammo -= 1
-    fire_timer.start()    # Bir sonraki atış için süreyi başlat
-
-    # Saçılma ekle: rastgele ±2 derece sapma
-    var spread := deg_to_rad(randf_range(-spread_degrees, spread_degrees))
-    var direction := Vector2.RIGHT.rotated(global_rotation + spread)
-
-    # Tüm cihazlarda mermi oluştur
-    _spawn_bullet.rpc(muzzle.global_position, direction, shooter_peer_id, shooter_team_id)
-
-    if current_ammo <= 0:
-        reload()
-```
-
----
-
-**`_spawn_bullet()` — Mermi Oluştur (Tüm Cihazlarda)**
-
-```gdscript
-@rpc("any_peer", "call_local", "reliable")
-func _spawn_bullet(spawn_pos, direction, shooter_peer_id, shooter_team_id) -> void:
-    var bullet = bullet_scene.instantiate()
-    get_tree().current_scene.add_child(bullet)
-    bullet.global_position = spawn_pos
-    bullet.initialize(direction, bullet_speed, damage, shooter_peer_id, shooter_team_id)
-```
-
-> ℹ️ Mermi **her cihazda** yerel olarak hareket eder. Merkezi senkronizasyon yok. Bu yaklaşım (client-side mermi) gecikmeyi gizlemek için yaygın kullanılır.
-
----
-
-**`reload()` — Şarj Et**
-
-```gdscript
-func reload() -> void:
-    if is_reloading or current_ammo == max_ammo: return
-    is_reloading = true
-    ammo_label.text = "Şarj ediliyor..."
-    reload_timer.start()
-    await reload_timer.timeout          # 1.8 saniye bekle
-    current_ammo = max_ammo
-    is_reloading = false
-```
-
----
-
-### 7.2 `Bullet.gd`
-
-Mermi, `Area2D` (çarpışma algılayan alan) olarak çalışır. Fizik nesnesi değildir; her frame elle hareket ettirilir.
-
-**Değişkenler:**
-```gdscript
-var direction: Vector2    # Hangi yöne gidecek (normalize edilmiş)
-var speed: float          # Hız
-var damage: float         # Hasar miktarı
-var shooter_peer_id: int  # Kimin attığı (çift hasar önlemi için)
-var shooter_team_id: int  # Hangi takım attı (dost ateş önlemi için)
-const MAX_DISTANCE = 1000 # Maks menzil (piksel)
-```
-
----
-
-**`_physics_process()` — Merminin Hareketi**
-
-```gdscript
-func _physics_process(delta) -> void:
-    var move := direction * speed * delta
-    global_position += move
-    _travel_distance += move.length()
-    if _travel_distance >= MAX_DISTANCE:
-        queue_free()    # Menzil aşılınca sil
-```
-
----
-
-**`_on_body_entered()` — Çarpışma**
-
-Bu fonksiyon, mermi bir `CharacterBody2D`'ye çarptığında çalışır.
-
-```gdscript
-func _on_body_entered(body) -> void:
-    if body is CharacterBody2D:
-        # 1. Dost ateş kontrolü
-        if body.get("team_id") == shooter_team_id:
-            queue_free(); return    # Aynı takımdan biri, hasar verme
-
-        # 2. Sadece atan oyuncunun clienti hasar bildirir
-        if NetworkManager.get_local_id() == shooter_peer_id:
-            if NetworkManager.is_host():
-                body.take_damage(damage, shooter_peer_id)    # Direkt çağır
-            else:
-                body.take_damage.rpc_id(1, damage, shooter_peer_id)  # Host'a gönder
-
-    queue_free()    # Mermiyi her koşulda sil
-```
-
-> ℹ️ **Neden sadece atan oyuncunun clienti bildirir?**
-> Mermi her cihazda yerel olarak hareket eder. Tüm cihazlar aynı çarpışmayı görür. Eğer hepsi hasar bildirse 4-5 kez hasar işlenir (çift hasar). Bu nedenle sadece **silahı atan** oyuncunun cihazı hasar RPC'si gönderir.
-
----
-
-## 8. Işık Sistemi — `StreetLamp.gd`
-
-Sokak lambası, editörde sahneye yerleştirilen ve isteğe bağlı titreyen bir ışık kaynağıdır.
-
-**Özellikler (`@export`):**
-- `flicker: bool` — Titreme açık/kapalı
-- `flicker_speed: float` — Titreme hızı (0.1 sn varsayılan)
-
-**`_make_light_texture()` — Işık Texture'ı Oluştur**
-
-Merkezden dışa doğru beyazdan şeffafa geçen radyal bir gradient texture oluşturur:
-
-```gdscript
-static func _make_light_texture() -> GradientTexture2D:
-    var g := Gradient.new()
-    g.set_color(0, Color(1,1,1,1))      # Merkez: tamamen beyaz
-    g.add_point(1.0, Color(1,1,1,0))   # Kenar: tamamen şeffaf
-    var tex := GradientTexture2D.new()
-    tex.fill = GradientTexture2D.FILL_RADIAL   # Dairesel dolum
-    return tex
-```
-
-**`_start_flicker()` — Titreme**
-
-```gdscript
-func _start_flicker() -> void:
-    while true:                                             # Sonsuz döngü
-        await get_tree().create_timer(flicker_speed + randf() * 0.2).timeout
-        light.energy = randf_range(0.6, 1.2)               # Işık yoğunluğunu rastgele değiştir
-```
-
-> ℹ️ `while true` içinde `await` kullanmak Godot'ta normaldir. `await` sırasında diğer kodlar çalışmaya devam eder.
-
----
-
-## 9. Ağ Mimarisi — Büyük Resim
-
-### 9.1 Kim Neye Karar Verir?
-
-| Karar | Kim Verir | Neden |
-|-------|-----------|-------|
-| Takım değişikliği | Host | Merkezi kayıt |
-| Hazır olma | Host | Merkezi kayıt |
-| Oyun başlatma | Host | Tek otorite |
-| Hasar hesaplama | Host | Hile önleme |
-| Oyuncu spawning | Her cihaz kendisi | Gecikmeyi gizleme |
-| Mermi hareketi | Her cihaz kendisi | Gecikmeyi gizleme |
-| Pozisyon yayını | Yerel oyuncu | Kendi pozisyonunu yayar |
-
-### 9.2 Veri Akış Diyagramı
-
-```
-[Oyuncu A (Client)] ──────────────────── [Host (Server+Oyuncu)]
-       │                                          │
-       │ 1. shoot() → mermi oluştur (yerel)       │
-       │                                          │
-       │ 2. Mermi çarptı →                        │
-       │    take_damage.rpc_id(1) ──────────────→ │ take_damage() çalışır
-       │                                          │ health azalır
-       │ ←──────── _sync_health.rpc(health) ───── │ (herkese yayar)
-       │                                          │
-       │ ←──────── _apply_death.rpc() ─────────── │ (can 0 ise)
-       │                                          │
-       │ 3. Pozisyon her 0.05sn →                 │
-       │    _broadcast_state.rpc() ─────────────→ │ (+ diğer clientlara)
-```
-
-### 9.3 Neden `unreliable_ordered` Pozisyon İçin?
-
-Pozisyon her saniye 20 kez gönderilir. Bir paket kaybolursa zaten 0.05 saniye sonra yenisi gelir. `reliable` kullanmak gereksiz bant genişliği ve gecikme yaratır. `unreliable_ordered` ise eski paketleri atar, sadece en yeni pozisyonu uygular.
-
----
-
-## 10. Oyunun Akışı (Baştan Sona)
-
-```
-1. BAŞLANGIÇ
-   Godot açılır → Main.tscn → Main.gd → MainMenu.tscn yüklenir
-
-2. BAĞLANTI
-   A. Host: NetworkManager.create_server() → ENet sunucu başlatılır
-   B. Client: NetworkManager.join_server() → Sunucuya bağlanır
-              → register_player RPC → Host oyuncuyu kaydeder
-              → receive_player_list RPC → Herkes güncel listeyi alır
-   Herkes → Lobby.tscn'e geçer
-
-3. LOBİ
-   - Oyuncular takım seçer (→ Host'ta kaydedilir → Herkese yayılır)
-   - Oyuncular "Hazır" basar (→ Host'ta kaydedilir → Herkese yayılır)
-   - Herkes hazır → _check_all_ready() → GameManager.start_game()
-
-4. OYUN BAŞLAR
-   _start_game_rpc.rpc() → Herkes:
-     - Map.tscn yüklenir
-     - Kendi oyuncusunu spawn eder
-     - _notify_player_spawned.rpc() → Diğerleri de onun oyuncusunu oluşturur
-   HUD devreye girer
-
-5. OYUN
-   Döngü (saniyede 60 kez):
-     - Yerel oyuncu: Giriş → Hareket → Ateş → Pozisyon yayınla
-     - Uzak oyuncular: Gelen pozisyona lerp ile yaklaş
-
-   Öldürme zinciri:
-     Mermi çarpar → Host hasar hesaplar → Tüm cihazlara sağlık gönderilir
-     Can 0 → Ölüm RPC → 3sn bekle → Respawn RPC
-
-6. OYUN BİTER
-   Takım 30 öldürmeye ulaşır → team_won sinyali
-   → GameManager._on_team_won() → _end_game_rpc.rpc()
-   → HUD: "X Takımı Kazandı!" paneli açılır
-
-7. ANA MENÜYE DÖN
-   GameManager.return_to_menu()
-   → active_players temizlenir
-   → NetworkManager.disconnect_all()
-   → Main.tscn yüklenir
-```
-
----
-
-## 11. Kritik Tasarım Kararları ve Nedenleri
-
-### 11.1 Neden MultiplayerSynchronizer Kullanılmadı?
-
-Godot 4'ün `MultiplayerSynchronizer` node'u kolay senkronizasyon sağlar, ancak config dosyası gerektirir ve olmadan sürekli hata verir. Bu projede **manuel RPC** ile pozisyon senkronizasyonu yapıldı. Daha fazla kod yazılır ama tam kontrol sağlanır.
-
-### 11.2 Neden Host Kendine `rpc_id(1, ...)` Göndermez?
-
-Godot'ta bir node, kendi peer_id'sine RPC gönderemez. Host her zaman id=1'dir. Bu nedenle:
-```gdscript
-# Yanlış (host olunca çalışmaz):
-take_damage.rpc_id(1, ...)
-
-# Doğru:
-if NetworkManager.is_host():
-    take_damage(...)    # Direkt çağır
-else:
-    take_damage.rpc_id(1, ...)   # Host'a gönder
-```
-
-### 11.3 Neden `set_deferred("disabled", true)`?
-
-Fizik işlemi sırasında (`_physics_process` içinden çağrılan fonksiyonlarda) CollisionShape'i direkt devre dışı bırakmak Godot'ta crash'e yol açar. `set_deferred` değişikliği bir sonraki safe noktaya erteler.
-
-### 11.4 Neden `absf`, `clampf`, `minf`, `maxf`?
-
-Godot 4.6 strict modda `abs()`, `clamp()` gibi generic fonksiyonlar `Variant` tipinde çalışır ve uyarı verir. `float` için `absf`, `clampf` kullanmak hem uyarıyı kaldırır hem daha hızlı çalışır.
-
-### 11.5 Neden Her Cihaz Kendi Mermisini Oluşturur?
-
-Alternatif: Sadece host mermi oluşturur ve diğerlerine bildirir. Bu gecikme yaratır (atış anı ile görünüm arasında). Yerel mermi oluşturma ile atış anlık hissedilir. Çarpışma doğruluğu ağ gecikmesine bağlı olsa da kullanıcı deneyimi daha iyi olur.
-
----
-
-## 12. Bilinen Sınırlamalar ve Gelecek Geliştirme Alanları
-
-### 12.1 Şu An Eksik Olanlar
-
-| Alan | Durum | Not |
-|------|-------|-----|
-| Harita | Editörde yapılacak | Duvarlar, objeler, ışık kaynakları |
-| Oyuncu sprite | Geçici (robot logo) | Özel karakter sanatı eklenebilir |
-| Ses efektleri | Yok | Ateş, ölüm, adım sesleri |
-| Animasyonlar | Yok | Koşma, ateş animasyonları |
-| Birden fazla silah | Yok | Silah sistemi genişletilebilir |
-| Anti-cheat | Yok | Sadece host doğrulaması var |
-
-### 12.2 Gelecekte Eklenebilecekler
-
-**Silah çeşitliliği:** `Weapon.gd` `@export` değerleri sayesinde editörde farklı silahlar yapılabilir. Yeni sahne oluşturup değerleri ayarlamak yeterli.
-
-**Harita sistemi:** Farklı haritalar eklemek için `map_scene` değişkeni değiştirilebilir veya rastgele seçim yapılabilir.
-
-**Puan tablosu:** `NetworkManager.players` sözlüğüne `kills` ve `deaths` alanları eklenip lobi/HUD'da gösterilebilir.
-
-**Ses sistemi:** `AudioStreamPlayer2D` node'ları eklenip ateş/ölüm anlarında çalıştırılabilir.
-
-**Hasar gösterimi:** `_apply_death` içinde kırmızı yanıp sönme veya `take_damage` sırasında kısa titreme efekti eklenebilir.
-
----
-
-*Bu doküman projenin tüm GDScript dosyalarını kapsamaktadır. Her ileride geliştirme kararında bu dosyaya bakarak hangi sistemi nerede değiştirmeniz gerektiğini anlayabilirsiniz.*
+## 16. Bilinen sınırlamalar ve yol haritası
+
+| Alan | Durum |
+|---|---|
+| Karakter modelleri | Tek temel model + kıyafet varyantları. **Karaktere özel model tasarımı planlanıyor.** |
+| Haritalar | Sadece "Labirent". **Yeni harita tasarımları planlanıyor** (oda ayarlarında harita seçimi hazır). |
+| Silah görselleri | Prosedürel basit tüfek; karaktere özel silah modelleri yok |
+| Ses | Ateş, adım, ortam, UI sesleri yok |
+| Karakter yetenekleri | Karakterler şimdilik sadece stat/silahla ayrışır (ör. Medic'in iyileştirme yeteneği yok) |
+| Anti-cheat | Sadece host doğrulaması |
+| İnternet üzerinden oyun | LAN/doğrudan IP; NAT geçişi/relay yok |
