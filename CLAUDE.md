@@ -4,8 +4,9 @@
 ENet multiplayer (port 7777). Karanlık harita + el feneri. Kart alıp kapıya teslim eden takım kazanır.
 
 Bu dosya **fonksiyon/sinyal/RPC bağlantı haritasıdır** — "X nerede tetikleniyor", "Y'yi kim çağırıyor"
-sorularına nokta atışı cevap vermek için. Davranış/karar gerekçeleri ve çözülen bug geçmişi için
-auto-memory dosyalarına bak (özellikle `player_lighting.md`, `host_migration.md`, `known_bugs.md`).
+sorularına nokta atışı cevap vermek için. **Yeni oturumda önce [docs/PROJE_GECMISI.md](docs/PROJE_GECMISI.md)'yi oku**:
+kullanıcı tercihleri (Türkçe cevap), karar gerekçeleri, özellik geçmişi, açık işler, test yöntemi ve tuzaklar orada.
+Teknik doküman: `DOKUMANTASYON.md`, oyun tasarımı: `OYUN_TASARIM_DOKUMANI.md`.
 
 ## Autoload sırası (project.godot) — bozulursa parse hatası
 `GameManager` → `TeamManager` → `RoomManager` → `NetworkManager` (RoomManager, NetworkManager'dan ÖNCE)
@@ -316,5 +317,4 @@ gereksiz kılıyor), rifle run/walking (UE Walk/Run bacakları + AimIdle üst g�
 - `AnimationPlayer.speed_scale = 0` pozu dondururken **geçişi (blend) de durdurur** → yeni animasyona hiç geçilmez.
   Durağan poz gerekiyorsa ayrı tek-karelik döngü klibi kullan (ör. `CrouchIdle`).
 
-Detaylı "neden böyle yapıldı" gerekçeleri ve kronolojik bug geçmişi: auto-memory
-(`architecture_decisions.md`, `player_lighting.md`, `host_migration.md`, `known_bugs.md`).
+Detaylı "neden böyle yapıldı" gerekçeleri, kronolojik özellik geçmişi ve test yöntemi: [docs/PROJE_GECMISI.md](docs/PROJE_GECMISI.md).

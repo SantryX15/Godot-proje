@@ -1,5 +1,6 @@
 # Godot cache
 .godot/
+.godot-mcp-addon-staging-*/
 
 # OS
 .DS_Store
